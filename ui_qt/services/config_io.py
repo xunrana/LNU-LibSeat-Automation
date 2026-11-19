@@ -1,6 +1,8 @@
 """配置 I/O：纯逻辑。读 / 写 / 注入到 ``sys.modules['config']``。
 
 使用 ``GuiState`` 作为单一可变状态容器，便于序列化和验证。
+v6 纯 API 引擎已移除所有浏览器/WebDriver 字段；读取老 v5 ``config.py`` 时
+会自动静默忽略废弃字段（``BROWSER`` / ``DRIVER_PATH`` / ``WEBDRIVER_CACHE``）。
 """
 from __future__ import annotations
 
@@ -12,11 +14,8 @@ from typing import Any
 
 
 MAX_ACCOUNTS = 2
-
-
-def default_browser() -> str:
-    """平台默认浏览器：Windows→edge，其它（macOS/Linux）→chrome。"""
-    return "edge" if sys.platform == "win32" else "chrome"
+DEFAULT_API_BASE_URL = "http://libseat.lnu.edu.cn"
+DEFAULT_API_FIRE_OFFSET_MS = 200
 
 
 @dataclass
@@ -25,6 +24,7 @@ class AccountState:
     password: str = ""
     start: str = ""
     end: str = ""
+
 
 # 校区 → 自习室
 ROOM_DATA = {
@@ -44,6 +44,7 @@ ROOM_DATA = {
 class GuiState:
     campus: str = "崇山校区图书馆"
     room: str = "三楼智慧研修空间"
+    fallback_rooms: list[tuple[str, str]] = field(default_factory=list)
     seats: list[str] = field(default_factory=list)
 
     account1: str = ""
@@ -59,7 +60,9 @@ class GuiState:
     accounts: list[AccountState] = field(default_factory=lambda: [AccountState()])
 
     email: str = ""
-    browser: str = ""  # "chrome" | "edge" | "safari"；空 = 按平台默认
+    webhook_url: str = ""
+    api_base_url: str = DEFAULT_API_BASE_URL
+    api_fire_offset_ms: int = DEFAULT_API_FIRE_OFFSET_MS
     mode: str = "scheduled"  # "now" | "scheduled"
     sched_hour: int = 6
     sched_min: int = 30
@@ -121,14 +124,27 @@ def account_entries(state: GuiState, include_empty: bool = False) -> list[Accoun
     return normalized
 
 
+def _normalize_fallback_rooms(raw: Any) -> list[tuple[str, str]]:
+    out: list[tuple[str, str]] = []
+    if not isinstance(raw, (list, tuple)):
+        return out
+    for item in raw:
+        if isinstance(item, (list, tuple)) and len(item) == 2:
+            c = str(item[0] or "").strip()
+            r = str(item[1] or "").strip()
+            if r:
+                out.append((c, r))
+    return out
+
+
 # ── 加载 ──
 def load_state(config_path: str) -> GuiState:
-    """从 ``config.py`` 解析；不存在或异常时返回全默认。"""
+    """从 ``config.py`` 解析；不存在或异常时返回全默认（静默忽略 v5 废弃浏览器字段）。"""
     state = GuiState()
     if not os.path.exists(config_path):
         return state
     try:
-        ns: dict = {}
+        ns: dict[str, Any] = {}
         with open(config_path, "r", encoding="utf-8") as f:
             exec(compile(f.read(), config_path, "exec"), ns)
 
@@ -153,13 +169,19 @@ def load_state(config_path: str) -> GuiState:
         state.sync_legacy_fields()
 
         if v := ns.get("TARGET_CAMPUS"):
-            state.campus = v
+            state.campus = str(v)
         if v := ns.get("TARGET_ROOM"):
-            state.room = v
+            state.room = str(v)
+        if v := ns.get("FALLBACK_ROOMS"):
+            state.fallback_rooms = _normalize_fallback_rooms(v)
         if v := ns.get("RECEIVER_EMAIL"):
-            state.email = v
-        if v := ns.get("BROWSER"):
-            state.browser = str(v).lower()
+            state.email = str(v)
+        if v := ns.get("WEBHOOK_URL"):
+            state.webhook_url = str(v)
+        if v := ns.get("API_BASE_URL"):
+            state.api_base_url = str(v)
+        if (off := ns.get("API_FIRE_OFFSET_MS")) is not None:
+            state.api_fire_offset_ms = int(off)
 
         state.seats = list(ns.get("PREFER_SEATS", []) or [])
         state.mode = "scheduled" if ns.get("WAIT_FOR_0630", True) else "now"
@@ -170,7 +192,6 @@ def load_state(config_path: str) -> GuiState:
             state.sched_min = int(m)
 
     except Exception:
-        # 配置损坏则退回默认
         return GuiState()
     return state
 
@@ -193,8 +214,6 @@ def validate(state: GuiState) -> tuple[bool, str]:
         seen.add(account.account)
     if not state.room.strip():
         return False, "请选择自习室"
-    if not state.seats:
-        return False, "请至少填写一个优先座位号"
     if state.mode == "scheduled":
         h, m = state.sched_hour, state.sched_min
         if not (0 <= h <= 23 and 0 <= m <= 59):
@@ -204,10 +223,11 @@ def validate(state: GuiState) -> tuple[bool, str]:
 
 # ── 写盘 ──
 def save_state_to_file(state: GuiState, config_path: str) -> None:
-    seats_str = ", ".join(f'"{s}"' for s in state.seats)
-    def esc(s):
+    def esc(s: str) -> str:
         return (s or "").replace("\\", "\\\\").replace('"', '\\"')
 
+    seats_str = ", ".join(f'"{esc(s)}"' for s in state.seats)
+    fb_str = ", ".join(f'("{esc(c)}", "{esc(r)}")' for c, r in state.fallback_rooms)
     is_sched = state.mode == "scheduled"
 
     user_block = ""
@@ -223,16 +243,19 @@ def save_state_to_file(state: GuiState, config_path: str) -> None:
 
     content = (
         "# ===================================================================\n"
-        "# LNU-LibSeat-Automation 配置文件 (由 GUI 自动保存)\n"
+        "# LNU-LibSeat-Automation v6 配置文件 (由 GUI 自动保存，纯 API 模式)\n"
         "# ===================================================================\n\n"
         f"USERS = {{\n{user_block}}}\n\n"
         f'TARGET_CAMPUS = "{esc(state.campus)}"\n'
         f'TARGET_ROOM = "{esc(state.room)}"\n'
+        f"FALLBACK_ROOMS = [{fb_str}]\n"
         f"PREFER_SEATS = [{seats_str}]\n\n"
         f"WAIT_FOR_0630 = {is_sched}\n"
-        f"MAX_ACCOUNTS = {MAX_ACCOUNTS}\n"
-        f'\nBROWSER = "{esc(state.browser or default_browser())}"\nDRIVER_PATH = ""\nWEBDRIVER_CACHE = ""\n\n'
+        f"MAX_ACCOUNTS = {MAX_ACCOUNTS}\n\n"
+        f'API_BASE_URL = "{esc(state.api_base_url or DEFAULT_API_BASE_URL)}"\n'
+        f"API_FIRE_OFFSET_MS = {int(state.api_fire_offset_ms)}\n\n"
         f'RECEIVER_EMAIL = "{esc(state.email)}"\n'
+        f'WEBHOOK_URL = "{esc(state.webhook_url)}"\n'
         'SMTP_USER = ""\nSMTP_PASS = ""\n\n'
         'LOG_LEVEL = "INFO"\nLOG_DIR = "logs"\n'
     )
@@ -242,12 +265,10 @@ def save_state_to_file(state: GuiState, config_path: str) -> None:
 
 # ── 注入 ──
 def inject_into_sys_modules(state: GuiState) -> None:
-    """把 state 转成动态 ``config`` 模块塞进 ``sys.modules``。
-    ``main.py`` 内的 ``import config`` 会立刻拿到这份。
-    """
+    """把 state 转成动态 ``config`` 模块塞进 ``sys.modules``。"""
     is_sched = state.mode == "scheduled"
 
-    users: dict = {}
+    users: dict[str, Any] = {}
     for entry in account_entries(state)[:MAX_ACCOUNTS]:
         if not entry.account:
             continue
@@ -256,23 +277,22 @@ def inject_into_sys_modules(state: GuiState) -> None:
             "time": {"start": entry.start, "end": entry.end},
         }
 
-    # 动态填充的运行期 config 模块；属性在此逐个注入，故标注为 Any。
     cfg: Any = types.ModuleType("config")
     cfg.USERS = users
     cfg.TARGET_CAMPUS = state.campus
     cfg.TARGET_ROOM = state.room.strip()
+    cfg.FALLBACK_ROOMS = list(state.fallback_rooms)
     cfg.PREFER_SEATS = list(state.seats)
     cfg.WAIT_FOR_0630 = is_sched
     cfg.MAX_ACCOUNTS = MAX_ACCOUNTS
-    cfg.BROWSER = state.browser or default_browser()
-    cfg.DRIVER_PATH = ""
-    cfg.WEBDRIVER_CACHE = ""
+    cfg.API_BASE_URL = (state.api_base_url or DEFAULT_API_BASE_URL).strip()
+    cfg.API_FIRE_OFFSET_MS = int(state.api_fire_offset_ms)
     cfg.RECEIVER_EMAIL = state.email.strip()
+    cfg.WEBHOOK_URL = state.webhook_url.strip()
     cfg.SMTP_USER = ""
     cfg.SMTP_PASS = ""
     cfg.LOG_LEVEL = "INFO"
 
-    # LOG_DIR 用绝对路径，确保打包后定位正确（macOS 下落在 .app 同级目录）
     try:
         from core import paths
         log_dir = str(paths.app_data_dir() / "logs")

@@ -2,13 +2,13 @@
 
 # 🏗️ 架构与开发文档
 
-### LNU-LibSeat v5.0.0 内部实现详解
+### LNU-LibSeat v6.0.0 纯 API 引擎内部实现详解
 
 [← 返回 README](../README.md) ·
-[快速上手](QUICKSTART.md) ·
+[纯 API 协议契约](API_PROTOCOL_CONTRACT.md) ·
 [配置详解](CONFIGURATION.md) ·
-[v5.0.0 升级日志](RELEASE_NOTES_V5.md) ·
-[v3→v5 升级指南](MIGRATION_V3_TO_V5.md)
+[v6.0.0 发布说明](RELEASE_NOTES_V6.md) ·
+[v5 → v6 升级指南](MIGRATION_V5_TO_V6.md)
 
 </div>
 
@@ -16,428 +16,214 @@
 
 ## 📑 目录
 
-- [v5.0.0 重大变化](#v500-重大变化)
-- [整体架构](#整体架构)
-- [模块依赖图](#模块依赖图)
-- [核心抢座流程（时序图）](#核心抢座流程时序图)
+- [v6.0.0 架构跃迁](#v600-架构跃迁)
+- [整体四层架构](#整体四层架构)
+- [核心抢座时序（06:30 定时模式）](#核心抢座时序0630-定时模式)
 - [各模块详解](#各模块详解)
 - [关键设计决策](#关键设计决策)
-- [PyInstaller 打包](#pyinstaller-打包)
+- [PyInstaller 打包与瘦身](#pyinstaller-打包与瘦身)
 
 ---
 
-## v5.0.0 重大变化
+## v6.0.0 架构跃迁
 
-> 完整变更见 [RELEASE_NOTES_V5.md](RELEASE_NOTES_V5.md)。
+v6.0.0 **彻底移除 Selenium、WebDriver 与浏览器录屏**，重构为单一纯 HTTP API 引擎，实现以下核心解耦：
 
-| 重构 | 影响层 | 关键文件 |
-|------|--------|---------|
-| **PySide6 GUI 重构** | 入口层 | `gui_qt.py` + `ui_qt/` 23 模块（取代 `gui.py`） |
-| **YOLO4+Siamese 本地验证码** | 基础设施层 | `core/captcha_yolo4_siamese.py` / `captcha_click1_yolo4_siamese.py` / `yolo_onnx.py` / `checkpoints/` |
-| **模型预加载** | 入口层 | `main.py:_start_captcha_model_preload`（异步线程） |
-| **线程安全锁** | 业务逻辑层 | `logic/booker.py:_CAPTCHA_SOLVER_LOCK` / `_YOLO4_SIAMESE_PRELOADED` |
-| **配置精简** | 配置层 | 移除 `FORCE_API_ALWAYS`，新增 `MAX_ACCOUNTS=2` |
-| **反馈分类细化** | 业务逻辑层 | `_classify_booking_result()` 新增 `"stop"` 类型 |
-
-新增子文档：
-- 🧠 [验证码引擎文档](CAPTCHA_YOLO4_SIAMESE.md) — YOLO4+Siamese 技术细节
-- 🎨 [GUI 架构文档](GUI_QT_ARCHITECTURE.md) — PySide6 模块拆分
+| 变革 | 影响层 | 关键文件 |
+|---|---|---|
+| **纯 HTTP API 客户端 + 协议隔离** | 协议与基础设施层 | `core/protocol.py`、`core/api_crypto.py`、`core/libseat_client.py` |
+| **服务端时钟校准** | 基础设施层 | `core/clock_sync.py`（HTTP `Date` + `RTT/2`） |
+| **限流与防风控护栏** | 基础设施层 | `core/rate_limiter.py`（最小间隔 + Jitter + 冷却 + 429 熔断） |
+| **验证码统一自适应服务** | 基础设施层 | `core/captcha_service.py`（按 `wordCheckCount` + 槽位笔迹自动路由 Click1/Click3） |
+| **API 级脱敏追溯** | 基础设施层 | `core/session_recorder.py`（`http_trace.jsonl` + 轻量验证码叠加诊断图） |
+| **实时空座 + 多房兜底 + 防撞座** | 业务逻辑层 | `logic/seat_strategy.py`、`logic/booker.py`、`logic/orchestrator.py` |
+| **手机端 Webhook 即时推送** | 基础设施层 | `core/notifications.py`（Bark / PushPlus / Server酱 / 企微 / 飞书 / 钉钉） |
+| **彻底清除浏览器链** | 全仓 | 删除 `core/driver.py`、`core/screen_recorder.py`、`core/captcha_api.py`、`logic/navigator.py`、`logic/auth.py` |
 
 ---
 
-## 整体架构
+## 整体四层架构
 
-四层分层架构，**上层调用下层，下层不依赖上层**。
+依赖方向严格单向：**入口层 → 业务编排层 → 协议客户端层 → 推理与基础设施层**，`logic/` 与 `core/` 零 `PySide6` 依赖，可直接对接 CLI、桌面 GUI 及后续 v6.1 手机端 Web/PWA。
 
 ```mermaid
-graph TB
-    subgraph 入口层
-        GUI[gui_qt.py + ui_qt/<br/>PySide6 模块化界面]
-        CLI[main.py<br/>多线程调度 · 模型预加载]
+flowchart TB
+    subgraph L1["1. 入口与表现层"]
+        QT["gui_qt.py + ui_qt (PySide6 桌面)"]
+        CLI["main.py (CLI 装配入口)"]
     end
 
-    subgraph 业务逻辑层 logic/
-        AUTH[auth.py<br/>登录认证]
-        NAV[navigator.py<br/>校区/自习室切换]
-        BOOK[booker.py<br/>选座 + 验证码 + 提交 + 结果]
+    subgraph L2["2. 调度与业务编排层 (logic/)"]
+        ORCH["orchestrator.py (日程 / 多账号 / 维护期 / Token 重登)"]
+        BOOK["booker.py (ApiSeatBooker: 选座 / 验证码闭环 / 下单核验)"]
+        STRAT["seat_strategy.py (实时空座 / 多房兜底 / 防撞座)"]
+        CLS["result_classifier.py (纯函数结果与宽限窗分类)"]
     end
 
-    subgraph 基础设施层 core/
-        DRV[driver.py<br/>WebDriver 管理]
-        CAP[captcha.py<br/>ddddocr 登录验证码]
-        YOLO3[captcha_yolo4_siamese.py<br/>Click3 求解]
-        YOLO1[captcha_click1_yolo4_siamese.py<br/>Click1 求解]
-        ONNX[yolo_onnx.py<br/>ONNX 推理]
-        CKPT[checkpoints/<br/>7 个模型权重 ~210MB]
-        API[captcha_api.py<br/>图鉴 API 备份]
-        REC[screen_recorder.py<br/>浏览器录屏]
-        LOG[logger.py<br/>日志系统]
-        NOTIF[notifications.py<br/>SMTP 邮件]
-        UTIL[utils.py<br/>时间工具]
+    subgraph L3["3. 协议与客户端层 (core/)"]
+        CLIENT["libseat_client.py (LibSeatClient Protocol + HTTP 连接池)"]
+        PROTO["protocol.py (端点 / Global 动态引导 / 漂移异常)"]
+        CRYPTO["api_crypto.py (AES-128-CBC + HMAC-SHA256)"]
+        LIMIT["rate_limiter.py (节流 / 冷却 / 429 熔断)"]
+        CLOCK["clock_sync.py (HTTP Date 时钟校准)"]
     end
 
-    subgraph 配置层
-        CFG[config.py<br/>USERS · TARGET · SCHEDULE · API ...]
+    subgraph L4["4. 推理与基础设施层 (core/)"]
+        CAP["captcha_service.py (Click1/Click3 自适应服务 + 锁)"]
+        OCR["captcha.py (ddddocr 登录 4 位图形码)"]
+        ONNX["yolo_onnx.py + captcha_*_siamese.py + checkpoints/*.onnx"]
+        REC["session_recorder.py (脱敏 JSONL + 验证码诊断图)"]
+        NOTIF["notifications.py (SMTP 邮件 + 手机 Webhook)"]
+        BASE["logger.py / paths.py / utils.py"]
     end
 
-    GUI --> CLI
-    CLI --> AUTH
-    CLI --> NAV
-    CLI --> BOOK
-    CLI --> DRV
-    CLI --> REC
-    CLI --> NOTIF
-    CLI --> CFG
-    AUTH --> CAP
-    BOOK --> YOLO3
-    BOOK --> YOLO1
-    YOLO3 --> ONNX
-    YOLO1 --> ONNX
-    YOLO3 --> CKPT
-    YOLO1 --> CKPT
-    AUTH --> LOG
-    BOOK --> LOG
-    NAV --> LOG
+    QT --> CLI
+    CLI --> ORCH
+    ORCH --> BOOK
+    ORCH --> STRAT
+    ORCH --> CLOCK
+    ORCH --> NOTIF
+    ORCH --> BASE
+    BOOK --> STRAT
+    BOOK --> CLS
+    BOOK --> CLIENT
+    BOOK --> CAP
+    BOOK --> REC
+
+    CLIENT --> PROTO
+    CLIENT --> CRYPTO
+    CLIENT --> LIMIT
+    CLIENT --> CLOCK
+    CLIENT --> REC
+    CLIENT --> OCR
+    CAP --> ONNX
 ```
 
 ---
 
-## 模块依赖图
-
-```mermaid
-flowchart LR
-    main[main.py] --> cfg[config.py]
-    main --> drv[core/driver.py]
-    main --> util[core/utils.py]
-    main --> log[core/logger.py]
-    main --> rec[core/screen_recorder.py]
-    main --> notif[core/notifications.py]
-    main --> auth[logic/auth.py]
-    main --> nav[logic/navigator.py]
-    main --> book[logic/booker.py]
-
-    drv --> cfg
-    auth --> capsolver[core/captcha.py<br/>ddddocr 登录]
-    book --> capy3[core/captcha_yolo4_siamese.py]
-    book --> capy1[core/captcha_click1_yolo4_siamese.py]
-    capy3 --> onnx[core/yolo_onnx.py]
-    capy1 --> onnx
-    capy3 --> ckpt[core/checkpoints/*.onnx]
-    capy1 --> ckpt
-```
-
-> 📌 **依赖规则**：`logic/` 仅调用 `core/` 和 `config.py`；`main.py` 调用所有层；不允许反向依赖。
-
----
-
-## 核心抢座流程（时序图）
-
-下面是**定时模式**下，单账号 6:30 抢座的完整时序：
+## 核心抢座时序（06:30 定时模式）
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant T as thread_task
-    participant W as wait_until
-    participant D as get_driver
-    participant A as Authenticator
-    participant N as enter_room
-    participant B as SeatBooker
-    participant API as 本地 YOLO4+Siamese / ddddocr
+    participant O as Orchestrator
+    participant C as ClockSync
+    participant B as ApiSeatBooker
+    participant M as CaptchaService
+    participant S as LibSeat Server
 
-    Note over T: 6:29:00 启动
-    T->>W: wait_until(prep_at = 6:29:30)
-    W-->>T: ✓ 时间到
+    Note over O: 启动即异步预热 Click1+Click3 ONNX (~2s)
+    O->>O: wait_until(prep_at = 06:29:45)
+    O->>B: login(account, pwd)
+    B->>S: GET /auth/createCaptcha -> ddddocr -> GET /rest/auth (AES+HMAC)
+    S-->>B: 48 位 token + Date 响应头
+    B->>C: 采样 RTT 与 server_offset
+    B->>S: GET /rest/v2/user + /reservations + /free/filters + /layoutByDate
+    S-->>B: userId + 动态 room_id + 全房 seat_no->seat_id 索引
 
-    T->>D: get_driver()
-    D-->>T: WebDriver 实例
-    T->>A: login(account, password)
-    A->>API: 登录验证码 OCR
-    API-->>A: 识别结果
-    A-->>T: ✓ 已登录
-    T->>N: enter_room(target_campus, target_room)
-    N-->>T: ✓ 进入自习室
+    O->>O: wait_until(keepalive_at = 06:29:55, 服务端校准时间)
+    B->>S: GET /rest/v2/user (保活 TCP + 二次校准时钟)
+    S-->>B: 200 OK
 
-    T->>W: wait_until(seat_lock_at = 6:29:54)
-    W-->>T: ✓ 时间到
+    O->>O: wait_until(06:30:00 + API_FIRE_OFFSET_MS, 服务端校准时间)
 
-    loop 逐座位尝试（首选 + 兜底）
-        T->>B: select_time_and_wait(seat, start, end)
-        alt 锁座成功
-            B-->>T: ✓
-            opt 第一次成功锁座
-                T->>W: wait_until(fire_at = 6:30:00)
-                W-->>T: ✓ 时间到
-                Note over T: time.sleep(2) 等服务端切到放座状态
-            end
-            T->>B: fire_submit_trigger()
-            B-->>T: ✓ 弹出验证码
-            loop 验证码重试（最多 10 次）
-                T->>B: pre_solve_captcha()
-                B->>API: OCR 识别
-                API-->>B: 点击坐标
-                T->>B: fire_captcha_blitz(solve_data)
-                B->>B: ActionChains 点字 → 1.5s 后 JS 兜底补点 → 点确定
-                T->>B: check_result()
-                alt success
-                    B-->>T: ✓ 抢中
-                    Note over T: → 邮件通知 → 退出
-                else blacklist
-                    B-->>T: 🛑 立即停止会话
-                else retry_captcha
-                    B->>B: refresh_click_captcha
-                    Note over T: 继续重试当前座位
-                else failed
-                    B-->>T: 💔 换下一个座位
-                end
-            end
-        else 锁座失败
-            B-->>T: ✗ 换下一个座位
+    loop 主自习室首选直击 -> 实时空座刷新 -> FALLBACK_ROOMS 多房兜底
+        loop 单座验证码闭环 (最多 8 次)
+            B->>S: POST /cap/captcha/<token>?username=...
+            S-->>B: 330x160 bg + 70x36 target + wordCheckCount + 32 位 cap_token
+            B->>M: solve(target, bg, hint_count=wordCheckCount)
+            M-->>B: 1 点或 3 点原生像素坐标 (~62ms)
+            B->>S: GET /cap/checkCaptcha?a=Base64(JSON)&token=<cap_token>
+            S-->>B: status == OK
+            B->>S: POST /rest/v2/freeBook (multipart: seat, startTime, endTime, authid=<cap_token>)
+            S-->>B: JSON 业务结果
+        end
+        alt success
+            B->>S: GET /rest/v2/user/reservations (补全凭证核验)
+            O->>O: 发送邮件 + 手机 Webhook -> 退出
+        else not_open_yet (06:30:00~06:30:05 宽限窗)
+            B->>B: 退避 250ms 原地重探 (最多 5 次)
+        else seat_taken
+            B->>S: 冷却满足时刷新 /layoutByDate -> 切下一空座
+        else blacklist / stop / ProtocolDriftError
+            O->>O: 立即熔断退出
         end
     end
-
-    Note over T: 全部座位都失败 → 退出，不重启浏览器
 ```
 
 ### 关键时间点
 
-| 时刻 | 事件 | 提前量 |
-|------|------|-------|
-| `06:29:30` | 启动浏览器 + 登录 + 进自习室 | `PREP_LEAD_SECONDS = 30` |
-| `06:29:54` | 开始锁定座位（点座位 + 选时间） | `SEAT_LOCK_LEAD_SECONDS = 6` |
-| `06:30:00` | 触发「立即预约」按钮 | `fire_at` |
-| `06:30:02` | 实际开始点击（2s 缓冲） | `time.sleep(2)` 让服务端切状态 |
+| 时刻 | 事件 | 参数常量 |
+|---|---|---|
+| 启动瞬间 | 后台异步预热 Click1 + Click3 ONNX | `start_captcha_model_preload` |
+| `06:29:45` | 登录 + 动态解析自习室 + 拉全房座位索引 | `PREP_LEAD_SECONDS = 15` |
+| `06:29:55` | 轻量保活 + 二次校准服务端时钟 | `KEEPALIVE_LEAD_SECONDS = 5` |
+| `06:30:00.200` | 按服务端校准时间准点开抢 | `API_FIRE_OFFSET_MS = 200` |
+| `06:30:00–06:30:05` | 瞬态未放座短宽限重探窗口 | `OPEN_GRACE_WINDOW_SECONDS = 5.0` |
 
 ---
 
 ## 各模块详解
 
-### `main.py` — 入口与调度
+### 协议与基础设施层（`core/`）
 
-| 函数 | 作用 |
-|------|------|
-| `build_custom_schedule()` | 自定义时刻模式日程（任意 hh:mm，过点排次日） |
-| `wait_until()` | 分段精确等待，含 30 分钟心跳 + stop_event 响应 |
-| `run_browser_session()` | 单次浏览器会话；创建会话文件夹 `logs/sessions/<ts>_<acct>/` |
-| `run_timed_priority_attack()` | 全自习室扫描主循环（首选 + 兜底） |
-| `thread_task()` | 单账号完整流程；处理维护期重试 |
-| `main()` | 多线程入口（每个学号一个 thread） |
+| 模块 | 职责 |
+|---|---|
+| `core/protocol.py` | 端点常量、`baseUrl.js` `Global` 动态解析、座位状态枚举、`ProtocolDriftError` / `TokenExpiredError` |
+| `core/api_crypto.py` | `AES-128-CBC + PKCS7` 登录凭据加密、`HMAC-SHA256` 请求签名头、`Base64(JSON)` 坐标编码（兼容 `pycryptodome` 与 `cryptography`） |
+| `core/libseat_client.py` | `LibSeatClient` Protocol 与 `HttpLibSeatClient`（连接池复用、自动签名、自动喂 `ClockSync`、强 Schema 校验） |
+| `core/clock_sync.py` | RFC 7231 HTTP `Date` 头 + `RTT/2` 补偿偏移估算，自动拒收极端异常时间 |
+| `core/rate_limiter.py` | 单账号最小请求间隔（120ms ± 40ms）、空座快照冷却（1.5s）、指数退避、连续 429 熔断与单会话请求上限 |
+| `core/captcha_service.py` | 统一 Click1 / Click3 预热与线程锁，按 `wordCheckCount` → 槽位笔迹 → 时间窗口三级自适应路由 |
+| `core/captcha.py` | `ddddocr` 识别登录页 4 位图形验证码 |
+| `core/yolo_onnx.py` / `captcha_*_siamese.py` | 纯字节流 ONNX 推理引擎与 4 个 `core/checkpoints/*.onnx` 模型 |
+| `core/session_recorder.py` | 递归脱敏 `http_trace.jsonl` + 拼合 `target` / `bg` / YOLO 绿圈 / 点击红点的轻量 PNG 诊断图 |
+| `core/notifications.py` | SMTP 邮件 + 手机端 Webhook 推送（自动识别 Bark / PushPlus / Server酱 / 企微 / 飞书 / 钉钉 / 通用 JSON） |
+| `core/logger.py` / `paths.py` / `utils.py` | 按 `[account]` 分流日志、跨平台冻结路径解析、北京时间工具 |
 
-### `core/driver.py` — WebDriver 管理
+### 业务逻辑层（`logic/`）
 
-三级回退：`config.DRIVER_PATH` → `webdriver-manager` → SeleniumManager。
-支持 Edge / Chrome 双引擎。
+| 模块 | 职责 |
+|---|---|
+| `logic/orchestrator.py` | 多账号并发总控、日程计算、`wait_until`（支持服务端校准时钟）、维护期延迟/重连、Token 过期自动重登 |
+| `logic/booker.py` | `ApiSeatBooker`：已有预约预检、首选直击、实时空座刷新、`FALLBACK_ROOMS` 多房切换、验证码闭环与瞬态宽限 |
+| `logic/seat_strategy.py` | 座号归一化、`build_room_plan`、`plan_seat_candidates`、线程安全多账号防撞座 `SeatClaimCoordinator` |
+| `logic/result_classifier.py` | 纯函数业务反馈分类（兼容 `classify_booking_result`，新增结构化 `classify_api_booking_result`） |
 
-### `core/captcha.py` — 登录验证码（ddddocr）
+### 表现层（`main.py` + `gui_qt.py` + `ui_qt/`）
 
-| 类 | 用途 |
-|----|------|
-| `CaptchaSolver` | 登录页 4 位文本验证码，全局单例 `solver`（v5 中 `ClickCaptchaSolver` 已删除） |
-
-### `core/captcha_yolo4_siamese.py` — Click3（3 点连击）求解（v5 新增）
-
-- **`Yolo4SiameseSolver.solve(target_bytes, bg_bytes)`** → `Yolo4SiameseResult`
-- YOLO4 检测背景图字符位置（输入 640×640，置信度 ≥ 0.05），输出 4 个候选框
-- Siamese 网络（112×112 输入）按相似度排序 → 输出 3 个点击坐标 + 匹配度
-- 模型：`checkpoints/click3_yolo_plan_bg_char60_best.onnx` + `click3_siamese_yolo4_posw3_best.onnx`
-
-### `core/captcha_click1_yolo4_siamese.py` — Click1（单字定位）求解（v5 新增）
-
-- **`Click1Yolo4SiameseSolver.solve(target_bytes, bg_bytes)`** → `Click1SiameseResult`
-- 同 Click3 管线，但只输出 1 个最相似的点击坐标
-- 端到端准确率 **83.48%**
-- 模型：`checkpoints/click1_yolo_plan_bg_char40_best.onnx` + `click1_siamese_yolo4_best.onnx`
-
-### `core/yolo_onnx.py` — YOLO4 ONNX 推理引擎（v5 新增）
-
-- 通用 ONNX runtime 封装：letterbox 预处理 + NMS 后处理（最多 300 检测）
-- 默认参数：置信度 0.05，IoU 0.45，输入 640，填充色 114
-- 完全无 PyTorch 依赖，仅 `onnxruntime` + `numpy` + `opencv-python`
-
-### `core/checkpoints/` — 模型权重（v5 新增，~210MB）
-
-| 文件 | 类型 | 用途 |
-|------|------|------|
-| `click3_yolo_plan_bg_char60_best.onnx` | ONNX 推理 | Click3 YOLO 检测 |
-| `click3_yolo_plan_bg_char60_best.pt` | PyTorch 源 | Click3 YOLO 训练权重 |
-| `click3_siamese_yolo4_posw3_best.onnx` | ONNX 推理 | Click3 Siamese 相似度 |
-| `click3_siamese_yolo4_posw3_best.pth` | PyTorch 源 | Click3 Siamese 训练权重 |
-| `click1_yolo_plan_bg_char40_best.onnx` | ONNX 推理 | Click1 YOLO 检测 |
-| `click1_yolo_plan_bg_char40_best.pt` | PyTorch 源 | Click1 YOLO 训练权重 |
-| `click1_siamese_yolo4_best.onnx` | ONNX 推理 | Click1 Siamese 相似度 |
-
-详细技术细节见 [CAPTCHA_YOLO4_SIAMESE.md](CAPTCHA_YOLO4_SIAMESE.md)。
-
-### `core/captcha_api.py` — 图鉴 API（v5 保留备份，默认不调用）
-
-- **`TTShiTuClient`** 仍存在于代码中，但 v5 主流程已不调用
-- 如需自行重启 API 链路，参考 v3.0.0 调用方式
-- 详见 [MIGRATION_V3_TO_V5.md §FAQ](MIGRATION_V3_TO_V5.md#-faq)
-
-### `gui_qt.py` + `ui_qt/` — PySide6 GUI（v5 新增）
-
-`gui_qt.py` 仅 8 行，委托 `ui_qt.app:main()`。`ui_qt/` 23 模块拆分：
-
-| 子目录 | 文件数 | 职责 |
-|--------|--------|------|
-| `ui_qt/` 根 | 2 | `app.py`(MainWindow) + `theme.py`(全局主题) |
-| `panels/` | 2 | 左侧 ConfigPanel + 右侧 DashboardPanel |
-| `widgets/` | 11 | 倒计时环 / 日志终端 / 账号卡 / 按钮 / Logo 等 |
-| `workers/` | 1 | `booker_worker.py` 后台抢座线程 |
-| `services/` | 2 | `config_io.py` + `prevent_sleep.py` |
-
-完整拆分见 [GUI_QT_ARCHITECTURE.md](GUI_QT_ARCHITECTURE.md)。
-
-### `core/screen_recorder.py` — 浏览器录屏
-
-`driver.get_screenshot_as_png()` 抓帧 → OpenCV 写 MP4。
-为避免和主线程争 urllib3 连接，`main._enlarge_driver_pool()` 把池放大到 10。
-
-### `logic/booker.py` — `SeatBooker` 核心类
-
-| 方法 | 关键点 |
-|------|-------|
-| `select_time_and_wait()` | 选座 + 闪电失败检测 + 自动关闭遮挡弹窗；锁座 timeout 1s 实现 fail-fast |
-| `pre_solve_captcha()` | 验证码预分析（API 优先、本地兜底） |
-| `fire_captcha_blitz()` | ActionChains 点击文字 → 轮询按钮 60×0.05s → JS 兜底补点 → Selenium 点确认 |
-| `check_result()` | `EC.any_of` 多结果检测：`success` / `stop` / `blacklist` / `retry_captcha` / `failed` |
-| `_save_screenshot()` | 截图命名：`优先级_座位_重试_阶段_时间戳.png` |
-| `_build_solve_data()` | 像素坐标 → CSS 偏移量转换 |
-| `_report_api_error_safe()` | 错识别上报图鉴 reporterror 退费 |
-
-#### `check_result()` 状态枚举
-
-```
-success         → 邮件通知 → 退出
-stop            → 🛑 系统限制 / 每日上限 / 部分读者开放 → 立即停止会话
-blacklist       → 🛑 立即停止本次会话（不再重试，避免加重处罚）
-retry_captcha   → 验证码错误 / 系统繁忙 / 请稍后 → 刷新验证码继续
-failed          → 已有预约 / 预约失败 → 关弹窗换下一座位
-```
-
-### `logic/result_classifier.py` — 预约结果分类（纯函数）
-
-从 `booker.check_result()` 抽出的无副作用文本分类逻辑，便于单测（见 `tests/`）：
-
-| 函数 | 用途 |
-|------|------|
-| `is_blacklist_feedback(text)` | 命中黑名单提示 → 立即停止本次会话 |
-| `is_stop_booking_feedback(text)` | 命中系统限制 / 每日上限 / 部分读者开放 → 停止会话 |
-| `classify_booking_result(text)` | 综合判定 `success` / `stop` / `blacklist` / `retry_captcha` / `failed` |
-
-> 依赖规则：纯函数模块，无浏览器/网络副作用，`booker.py` 调用它做结果归类。
+- `main.py`（39 行）：薄 CLI 入口，导出调度函数并调用 `logic.orchestrator.run_all_accounts()`。
+- `ui_qt/`：PySide6 桌面界面；v6 移除了「浏览器」下拉框，新增「手机推送 Webhook」配置项，老 v5 `config.py` 自动静默兼容。
 
 ---
 
 ## 关键设计决策
 
 | 决策 | 状态 | 理由 |
-|------|-----|------|
-| **单浏览器会话深度尝试** | ✅ | 每会话 N 座位 × 验证码重试，避免反复重启浏览器 |
-| **全自习室兜底扫描** | ✅ | 首选耗尽 → 随机扫描剩余全部座位（v3.0.0 新增） |
-| **本地 YOLO4+Siamese 优先** | ✅ v5 | 06:30-06:35 窗口内本地推理，窗口外关闭验证码弹窗换座 |
-| **ActionChains + JS 双保险点击** | ✅ | Vue 异步渲染下 ActionChains 可能落空，1.5s 后 JS MouseEvent 用精确 CSS 坐标补点 |
-| **`.el-button.confirm-btn` 选择器** | ✅ | 区分点击前的灰色 div 和点击后的真实按钮（Vue 条件渲染陷阱） |
-| **会话级追溯目录** | ✅ | 独立文件夹 + 4 阶段截图 + session.log + 抢座顺序.txt + MP4 |
-| **本地模型 10 次重试** | ✅ v5 | 本地 YOLO4+Siamese 快且免费，每个座位最多 10 次验证码机会 |
-| **`SEAT_LOCK_LEAD_SECONDS = 6`** | ✅ | v2.x 是 2，太短：实测锁座要 3-4s，余量不够会错过触发时机 |
-| **`fire_at` 后 sleep(2s)** | ✅ | 避开服务端从「未放座」切到「已放座」的瞬态空档（v3.0.0 hotfix） |
-| **黑名单立即停止** | ✅ | 命中「黑名单」提示立刻退出会话——继续重试只会加重处罚（v3.0.0 hotfix） |
-| **`normalize-space()` 日期匹配** | ✅ | 修复 `5/4` 误匹配 `5/14` 的 XPath bug（v3.0.0 hotfix） |
-| **`session.log` 仅含本次** | ✅ | 通过文件 offset 截取实现，避免历史日志灌水（v3.0.0 hotfix） |
-| **`stop_event` 全链路** | ✅ | Ctrl+C / GUI 停止按钮即时响应，每个 sleep / loop 都监听 |
-| **打包隔离 venv** | ✅ | `build.py` 创建临时 venv 仅装必需依赖，避免全局包被误打包 |
-| **自研 YOLO4+Siamese 替代图鉴 API** | ✅ v5 | 商业 API 0.016 元/次烧不起，本地推理离线零成本（[CAPTCHA_YOLO4_SIAMESE.md](CAPTCHA_YOLO4_SIAMESE.md)） |
-| **06:30-06:35 时间窗口** | ✅ v5 | 本地模型仅在抢座窗口启用，其他时段不消耗 CPU |
-| **模型预加载异步线程** | ✅ v5 | `main.py:31-51`，避免抢座当下冷启动 3-5s 延迟 |
-| **PySide6 替代 CustomTkinter** | ✅ v5 | Qt 原生渲染解决高分屏不一致，模块化拆分易维护 |
-| **`MAX_ACCOUNTS = 2` 并发上限** | ✅ v5 | 超过自动截断；多账号通过 `slot_index × 8s` 偏移避免争抢 |
-| **线程安全锁** | ✅ v5 | `_CAPTCHA_SOLVER_LOCK` + `_YOLO4_SIAMESE_PRELOADED` 防多账号并发推理冲突 |
-| **多自习室同时扫** | 🔬 | 后续规划 |
-| **失败模式智能学习** | 🔬 | 后续规划 |
+|---|---|---|
+| **彻底移除 Selenium，单一纯 API 引擎** | ✅ v6 | 消除浏览器启动 15–35s、1.5GB 内存、驱动版本错配与前端 3.5s 假延时 |
+| **协议单一来源 + `ProtocolDriftError` 熔断** | ✅ v6 | 无浏览器兜底后，所有端点/密钥集中于 `protocol.py` 并支持动态拉取 `baseUrl.js`；接口漂移时立刻停机保号 |
+| **保留 `ddddocr` 走标准登录图形码** | ✅ v6 | 实测 PC 端 `/rest/auth` 需要 `/auth/createCaptcha`，保留 `ddddocr` 最贴近真实前端流程且仅耗 ~50ms |
+| **HTTP `Date` 时钟校准 + 5s 瞬态宽限** | ✅ v6 | 实测用户本机与服务端存在 0.6–1.5s 偏差；校准 + 宽限取代盲目 `time.sleep(2)` |
+| **强制内置限流与请求预算硬顶** | ✅ v6 | 防止纯 API 高速轮询触发校园网出口 IP 限流或迫使校方升级风控 |
+| **多账号防撞座仅拦截重叠时段** | ✅ v6 | 允许双账号接力（如 9:00-15:00 + 15:00-21:00）抢同一心仪座，同时防止重叠时段内耗 |
+| **轻量脱敏追溯取代 MP4 录屏** | ✅ v6 | `http_trace.jsonl`（严格脱敏）+ 验证码叠加图（< 50KB）比视频更清晰且体积极小 |
+| **发行包仅拷贝 `*.onnx`** | ✅ v6 | 修复历史误打 `.pt/.pth` 问题，直接减重 ~73MB |
 
 ---
 
-## PyInstaller 打包
+## PyInstaller 打包与瘦身
 
 ```powershell
+# Windows (.exe)
 python build.py
-```
 
-### 隔离虚拟环境方案
-
-```mermaid
-flowchart LR
-    A[python build.py] --> B[创建 .build_venv/]
-    B --> C[pip install BUILD_DEPS<br/>PySide6 · selenium · onnxruntime · ddddocr ...]
-    C --> D[PyInstaller --onedir<br/>--collect-all PySide6/onnxruntime/cv2/numpy]
-    D --> E[shutil.rmtree .build_venv/]
-    E --> F[重命名 dist/LNU-LibSeat<br/>→ dist/LNU-LibSeat-v5.0.0/]
-    F --> G[拷贝 logo + info/ + core/checkpoints/ + 干净 config.py]
-    G --> H[shutil.make_archive .zip]
-```
-
-### 输出
-
-| 路径 | 说明 |
-|------|------|
-| `dist/LNU-LibSeat-v5.0.0/` | 完整可分发文件夹 |
-| `dist/LNU-LibSeat-v5.0.0/LNU-LibSeat.exe` | 双击运行的 GUI 入口（Windows） |
-| `dist/LNU-LibSeat-v5.0.0/config.py` | 干净模板（无个人数据） |
-| `dist/LNU-LibSeat-v5.0.0/info/` | 双校区 21 间自习室座位索引（含新「智慧空间」） |
-| `dist/LNU-LibSeat-v5.0.0/_internal/core/checkpoints/` | YOLO4+Siamese 模型权重 (~210MB) |
-| `dist/LNU-LibSeat-v5.0.0/logs/` | 日志根目录（运行时填充） |
-| `dist/LNU-LibSeat-v5.0.0.zip` | 上传 GitHub Release 用（上传时改名为 `LNU-LibSeat-v5.0.0-Windows-x86_64.zip`） |
-
-> ⚠️ `build.py:28` 中 `APP_VERSION = "v5.0.0"`，表示当前的主版本号。
-
-### macOS 打包（`.app`）
-
-> 源码：`build_mac.py` · CI：`.github/workflows/build-macos.yml`
-
-PyInstaller 无法跨平台编译——`.app` **必须在 macOS 上构建**（本地 Mac，或 GitHub Actions 的 `macos-14` runner；在 Windows 上跑 `build_mac.py` 会直接报错退出）。
-
-```bash
+# macOS (.app，需在 macOS 或 GitHub Actions macos-14 runner)
 python3 build_mac.py
 ```
 
-流程：干净临时 venv → `sips` + `iconutil` 生成 `logo.icns` → PyInstaller `--windowed`（产出 `.app`，无终端窗口）→ 组装发行夹（`.app` + 外置可编辑 `config.py` + `info/` + `logs/` + `首次运行请先双击我.command` 解除限制脚本 + 使用说明）→ `ditto -c -k --keepParent` 压成 zip（保留符号链接与 ad-hoc 签名）。
-
-| 路径 | 说明 |
-|------|------|
-| `dist/LNU-LibSeat-v5.0.0-macOS-<arch>/` | 发行夹（`<arch>` = 构建机 `platform.machine()`，如 `x86_64` / `arm64`） |
-| `dist/LNU-LibSeat-v5.0.0-macOS-<arch>.zip` | 分发 / 上传 Release 用 |
-
-推送 `v*` 标签时，CI 自动在 `macos-14` 上构建，并用 `softprops/action-gh-release` 把 `*-macOS-*.zip` 挂到对应 Release。
-
-> 🧭 **跨平台路径**：`core/paths.py` 统一解析两类目录——`resource_root()`（只读随包资源，冻结后取 `sys._MEIPASS`）与 `app_data_dir()`（用户可写数据：Windows 紧挨 `.exe`，macOS 落在 `.app` 同级目录，避免写入包内破坏签名）。
-
-### 关键 PyInstaller 参数
-
-```python
-# build.py 中
-"--onedir",                      # 一个文件夹（非 onefile，启动快）
-"--windowed",                    # GUI 模式无黑框
-"--collect-all", "ddddocr",      # 把模型文件和原生库都打进去
-"--collect-all", "onnxruntime",
-"--collect-all", "selenium",
-"--collect-all", "PySide6",
-"--exclude-module", "config",    # 不打 config.py — 用户外部覆盖
-"--runtime-hook", "_runtime_hook.py",  # 启动时设 cwd 和 sys.path
-```
-
----
-
-## 🔗 相关文档
-
-- 📘 [快速上手](QUICKSTART.md)
-- 🚀 [v3→v5 升级指南](MIGRATION_V3_TO_V5.md) — 老用户必读
-- ⚙️ [配置详解](CONFIGURATION.md)
-- 🧠 [验证码引擎文档](CAPTCHA_YOLO4_SIAMESE.md) — YOLO4+Siamese 技术细节
-- 🎨 [GUI 架构文档](GUI_QT_ARCHITECTURE.md) — PySide6 模块拆分
-- 📋 [反馈消息处理参考](FEEDBACK_MESSAGES.md)
-- 🔢 [数字参数](NUMERIC_PARAMETERS.md) — 所有超时/延迟/阈值清单
-- 🔀 [抢座流程图](BOOKING_FLOWCHART.md) — 11 张 Mermaid 流程图
-- 📦 [v5.0.0 升级日志](RELEASE_NOTES_V5.md)
-- 📜 [v3.0.0 历史日志](RELEASE_NOTES.md)
-- ☕ [README — 求赞助](../README.md#-求赞助--支持持续开发)
+关键打包变更（对比 v5）：
+- 移除依赖：`selenium`、`webdriver-manager`、`mss`
+- 新增依赖：`pycryptodome`（`--collect-all Crypto`）
+- 权重过滤：仅打包 `core/checkpoints/*.onnx`（排除本地 `.pt`/`.pth`）
+- CI 工作流：[`.github/workflows/ci.yml`](../.github/workflows/ci.yml) 全量离线跑 `pytest` + `ruff` + `mypy`；[`build-windows.yml`](../.github/workflows/build-windows.yml) 与 [`build-macos.yml`](../.github/workflows/build-macos.yml) 仅保留手动触发（`workflow_dispatch`），默认由本地打包后上传 Release。

@@ -11,15 +11,15 @@
 
 <h1 align="left">LNU-LibSeat</h1>
 
-<h3 align="left">🎯 辽宁大学图书馆 · 智能抢座神器 · v5.0.0</h3>
+<h3 align="left">🎯 辽宁大学图书馆 · 智能抢座神器 · v6.0.0</h3>
 
-<p align="left"><strong>6:30 它替你抢座 · 整点零延迟提交 · 自研 AI 识别 · 邮件秒达战报</strong></p>
+<p align="left"><strong>纯 API 毫秒级直连 · 彻底告别浏览器 · 自研 AI 识别 · 邮件 & 手机秒达战报</strong></p>
 
 <p align="left">
-<a href="https://python.org"><img src="https://img.shields.io/badge/Python-3.8+-blue?logo=python&logoColor=white" alt="Python"></a>
-<a href="https://doc.qt.io/qtforpython-6/"><img src="https://img.shields.io/badge/PySide6-6.7+-41CD52?logo=qt&logoColor=white" alt="PySide6"></a>
+<a href="https://python.org"><img src="https://img.shields.io/badge/Python-3.10+-blue?logo=python&logoColor=white" alt="Python"></a>
+<a href="https://doc.qt.io/qtforpython-6/"><img src="https://img.shields.io/badge/PySide6-6.7+-41CD22?logo=qt&logoColor=white" alt="PySide6"></a>
 <a href="https://onnxruntime.ai/"><img src="https://img.shields.io/badge/ONNX-Runtime-005CED?logo=onnx&logoColor=white" alt="ONNX Runtime"></a>
-<a href="https://selenium.dev"><img src="https://img.shields.io/badge/Selenium-4.x-43B02A?logo=selenium&logoColor=white" alt="Selenium"></a>
+<a href="https://requests.readthedocs.io/"><img src="https://img.shields.io/badge/Engine-Pure%20HTTP%20API-FF6B35" alt="Pure API"></a>
 <a href="https://github.com/XUNRANA/LNU-LibSeat-Automation/actions/workflows/ci.yml"><img src="https://github.com/XUNRANA/LNU-LibSeat-Automation/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 <a href="https://github.com/XUNRANA/LNU-LibSeat-Automation/releases/latest"><img src="https://img.shields.io/github/v/release/XUNRANA/LNU-LibSeat-Automation?label=Release&color=indigo" alt="Release"></a>
 <a href="#-免责声明"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License"></a>
@@ -30,10 +30,10 @@
 </tr>
 <!-- 统计数据行 -->
 <tr>
-<td align="center" width="250" height="160"><h1>🧠</h1>自研 YOLOv8+Siamese<br>本地识别</td>
-<td align="center" width="250" height="160"><h1>83.48%</h1>Click1 端到端准确率</td>
-<td align="center" width="250" height="160"><h1>21 间</h1>双校区自习室全覆盖</td>
-<td align="center" width="250" height="160"><h1>0 元</h1>你的使用成本</td>
+<td align="center" width="250" height="160"><h1>⚡</h1><b>0.55s</b> 实测抢座核心<br>纯 API 零浏览器依赖</td>
+<td align="center" width="250" height="160"><h1>🧠</h1>自研 YOLOv8+Siamese<br>Click1/Click3 自适应识别</td>
+<td align="center" width="250" height="160"><h1>🎯</h1>实时空座精准筛查<br>支持多自习室兜底</td>
+<td align="center" width="250" height="160"><h1>0 元</h1>本地离线零成本<br>邮件 + 手机 Webhook 秒推</td>
 </tr>
 </table>
 
@@ -42,11 +42,11 @@
 ---
 
 > [!IMPORTANT]
-> ✨ **v5.0.0 重磅升级！** 全新 PySide6 界面、自研验证码 AI、模型预加载——告别付费 API。
-> 详见 [v5.0.0 升级日志](docs/RELEASE_NOTES_V5.md) · 老用户看 [v3→v5 升级指南](docs/MIGRATION_V3_TO_V5.md)。
+> ✨ **v6.0.0 重磅架构升级！** 彻底移除 Selenium / Chromium / WebDriver，全面切换为 **纯 HTTP API 直连引擎**——实测核心下单 **0.55 秒**，告别浏览器版本匹配与 1.5GB 内存占用！
+> 详见 [v6.0.0 发布说明](docs/RELEASE_NOTES_V6.md) · 老用户必看 [v5 → v6 升级指南](docs/MIGRATION_V5_TO_V6.md)。
 
 > [!WARNING]
-> 🛡️ **准时到馆签到！** 连续或 7 天内累计 **3 次违约 = 黑名单 7 天**，所有账号都不能预约。
+> 🛡️ **准时到馆签到！** 连续或 7 天内累计 **3 次违约 = 黑名单 7 天**，期间无法预约。
 
 > [!TIP]
 > 第一次用？跳到 [§ 三步开始](#-三步开始30-秒上手) 30 秒搞定。
@@ -55,9 +55,9 @@
 
 ## 🎯 这是什么
 
-一个**双击即用**的 Windows 桌面工具，帮你在辽大图书馆每天 **06:30 放座**的瞬间完成：
+一个**双击即用、无需安装浏览器驱动**的桌面工具，帮你在辽大图书馆每天 **06:30 放座**的瞬间以纯 HTTP API 完成：
 
-登录 → 进自习室 → 锁定座位 → 识别验证码 → 提交预约 → 邮件通知。**不用装 Python，不用懂代码。**
+动态校准服务端时钟 → 极速登录 → 实时拉取空座 → 本地 AI 解点选验证码 → 一步提交 `freeBook` → 邮件 & 手机推送战报。**不用装 Python，不用装 Edge/Chrome 驱动，不用懂代码。**
 
 ### 适合谁用？
 
@@ -74,28 +74,28 @@
 双账号分时段无缝衔接 9:00-21:00
 </td>
 <td align="center" width="333">
-<h2>🌙 错峰玩家</h2>
-6:30 准时抢座<br>
-冷门座位成功率 100%
+<h2>🌙 错峰 / 捡漏玩家</h2>
+实时筛查当前空座<br>
+0.55 秒秒锁，不再盲扫全房
 </td>
 </tr>
 </table>
 
 ---
 
-## ⚖️ 手动 vs LNU-LibSeat
+## ⚖️ 手动 vs v5 浏览器 vs v6 纯 API
 
 <table width="1000">
-<tr><th align="left" width="250">抢座环节</th><th align="left" width="375">😩 手动操作</th><th align="left" width="375">⚡ LNU-LibSeat v5</th></tr>
-<tr><td><b>6:30 起床</b></td><td>必须，闹钟 5 个</td><td>❌ 不用，程序定时唤醒</td></tr>
-<tr><td><b>验证码识别</b></td><td>眼花点 5 次还点不准</td><td>🧠 自研 AI <b>&lt; 1s</b> 识别</td></tr>
-<tr><td><b>抢座失败重试</b></td><td>手动刷新→重选→重做验证码</td><td>✅ 自动换座 + 自动重做</td></tr>
-<tr><td><b>不填座位号</b></td><td>不可能，必须挑一个</td><td>⚠️ 至少填 1 个首选，程序自动兜底扫剩余全部</td></tr>
-<tr><td><b>双账号同时抢</b></td><td>物理开两个浏览器</td><td>✅ 多线程并发（最多 2 账号）</td></tr>
-<tr><td><b>整点零延迟提交</b></td><td>你最快也比 06:30:00 慢 1-3 秒</td><td>✅ 程序毫秒级精度</td></tr>
-<tr><td><b>抢中后通知</b></td><td>自己刷新页面看</td><td>📧 邮件秒达手机</td></tr>
-<tr><td><b>出问题排查</b></td><td>完全靠回忆</td><td>📁 录屏 + 4 阶段截图 + 日志</td></tr>
-<tr><td><b>付费 OCR 依赖</b></td><td>—</td><td>❌ 已无（v5 本地推理免费）</td></tr>
+<tr><th align="left" width="210">抢座环节</th><th align="left" width="230">😩 手动操作</th><th align="left" width="260">🐢 v5（Selenium 浏览器）</th><th align="left" width="300">⚡ v6（纯 API 引擎）</th></tr>
+<tr><td><b>浏览器与驱动</b></td><td>手动打开网页</td><td>依赖 Edge/Chrome/Safari + 驱动匹配</td><td>✅ <b>完全无需浏览器与 WebDriver</b></td></tr>
+<tr><td><b>登录与准备耗时</b></td><td>手动输码 10s+</td><td>提前 30s 启动浏览器</td><td>⚡ <b>< 1s</b>，提前 15s 预热 + 5s 保活</td></tr>
+<tr><td><b>内存占用（双账号）</b></td><td>—</td><td>~1.5GB（2 个浏览器进程）</td><td>🪶 仅共享一份 ONNX 上下文，每账号几十 KB</td></tr>
+<tr><td><b>空座查找策略</b></td><td>肉眼翻座位图</td><td>盲扫全房座号，每座试错 1–3s</td><td>🎯 <b>180ms 拉取全房实时空座</b>，零盲扫</td></tr>
+<tr><td><b>前端人为延时</b></td><td>硬等 1.5s+2s 动画</td><td>被迫等待 3.5s 假动画 + sleep(2)</td><td>🚀 <b>直击接口</b>，实测下单核心 <b>0.55s</b></td></tr>
+<tr><td><b>时钟偏差校准</b></td><td>看表容易偏 1–2s</td><td>依赖本机时钟</td><td>🕒 <b>HTTP Date 自动校准服务端时间</b> + 5s 瞬态宽限</td></tr>
+<tr><td><b>不填首选座位</b></td><td>必须手挑</td><td>v5 要求至少填 1 个首选</td><td>✅ <b>可留空</b>，直接抢实时空座；支持多自习室兜底</td></tr>
+<tr><td><b>成功战报通知</b></td><td>手动刷新查看</td><td>仅邮件通知</td><td>📲 <b>邮件 + 手机端 Webhook 秒推</b>（Bark/PushPlus/企微等）</td></tr>
+<tr><td><b>出问题排查</b></td><td>全靠回忆</td><td>截图 + 笨重 MP4 录屏</td><td>📁 <b>脱敏 http_trace.jsonl + 轻量验证码叠加图</b></td></tr>
 </table>
 
 ---
@@ -109,7 +109,7 @@
 <a href="https://github.com/XUNRANA/LNU-LibSeat-Automation/releases/latest">
 <img src="docs/screenshots/00_github_release.png" width="280" alt="去 Releases 下 zip">
 </a>
-<p>去 <a href="https://github.com/XUNRANA/LNU-LibSeat-Automation/releases/latest">Releases</a> 下载<br><code>LNU-LibSeat-v5.0.0-Windows-x86_64.zip</code></p>
+<p>去 <a href="https://github.com/XUNRANA/LNU-LibSeat-Automation/releases/latest">Releases</a> 下载<br><code>LNU-LibSeat-v6.0.0-Windows-x86_64.zip</code></p>
 </td>
 <td align="center" width="333">
 <h3>② 解压 → 双击</h3>
@@ -125,185 +125,111 @@
 </table>
 
 > [!NOTE]
-> ❌ **不需要** Python、命令行、环境变量、手动下驱动——所有依赖都打包进 exe 了。
+> ❌ **不需要** Python、命令行、Edge/Chrome 浏览器、WebDriver 驱动——所有依赖都已打包进发行包。
 >
-> ✅ 唯一前提：Windows 10/11 + 装了 Edge 或 Chrome（任意较新版本即可）。
+> ✅ 唯一前提：Windows 10/11 或 macOS，能访问 `libseat.lnu.edu.cn` 即可。
 
 ---
 
-## 🍎 macOS 用户（Intel & Apple 芯片）
+## 🍎 macOS 用户（Apple Silicon & Intel）
 
 Mac 双击不了 `.exe`，请下载 macOS 专版 `.app`：
 
-1. 去 [Releases](https://github.com/XUNRANA/LNU-LibSeat-Automation/releases/latest) 下载 `LNU-LibSeat-v5.0.0-macOS-x86_64.zip`。
+1. 去 [Releases](https://github.com/XUNRANA/LNU-LibSeat-Automation/releases/latest) 下载 `LNU-LibSeat-v6.0.0-macOS-arm64.zip`。
 2. 解压后，**右键**点击 `首次运行请先双击我.command` → 「打开」→ 再点一次「打开」。
-   - 应用未做苹果付费签名，首次必须用右键打开以解除安全限制；之后可直接双击 `LNU-LibSeat.app`。
+   - 应用未做苹果付费签名，首次必须右键打开一次解除安全限制；之后可直接双击 `LNU-LibSeat.app`。
    - 若提示「无法打开」，到 **系统设置 ▸ 隐私与安全性 ▸ 仍要打开**。
-3. 装好 **Google Chrome**（默认驱动，支持双账号并行），填表 →「开始抢座」。
+3. 填表 → 「开始抢座」。
 
 > [!NOTE]
-> - **支持所有 Mac**：Intel 芯片**原生运行**；Apple 芯片（M1/M2/M3/M4…）首次启动会**自动通过 Rosetta 2 运行**——系统弹窗点一下装好 Rosetta 即可。
-> - **浏览器**：默认 Chrome；也可在应用内「浏览器」下拉选 Safari（需先开启 Safari ▸ 设置 ▸ 高级 ▸ 显示开发菜单 ▸ 开发 ▸ 允许远程自动化），但 Safari 仅支持**单账号**、不支持双账号并行。
-> - **数据位置**：`config.py`、`logs/` 在解压文件夹内、与 `.app` 同级，可直接查看 / 编辑。
-> - **屏幕录制**：此功能在 macOS 上可能不可用（不影响抢座）。
+> - **v6 彻底移除浏览器限制**：macOS 不再需要安装 Chrome 或折腾 Safari 远程自动化，**双账号原生并发**，体验与 Windows 100% 一致！
+> - **数据位置**：`config.py`、`logs/` 与 `.app` 同级，可直接查看 / 编辑。
 
 ---
 
-## 💎 v5.0.0 核心特色
+## 💎 v6.0.0 核心特色
 
 <table width="1000">
 <tr>
 <td width="333" valign="top">
-<h3>🧠 自研验证码 AI</h3>
-<b>YOLOv8 检测 + Siamese 相似度</b>双阶段管线，本地 ONNX 推理，告别付费 API。<br>
-Click1 端到端 <b>83.48%</b> 准确率，单次 &lt; 1s。
+<h3>⚡ 纯 HTTP API 直连引擎</h3>
+彻底移除 Selenium / WebDriver，完整实现 AES-128-CBC 凭据加密与 HMAC-SHA256 请求签名，动态拉取 <code>baseUrl.js</code> 密钥配置，实测核心下单 <b>0.55s</b>。
 </td>
 <td width="333" valign="top">
-<h3>🎨 PySide6 全新界面</h3>
-<b>Qt 原生渲染</b>，高分屏一致体验。<br>
-模块化拆分：<code>panels/</code> + <code>widgets/</code> + <code>workers/</code> + <code>services/</code>，<b>23 个</b>组件解耦。
+<h3>🕒 服务端时钟校准 + 瞬态宽限</h3>
+通过 HTTP <code>Date</code> 响应头与 RTT/2 自动校准本机与服务端时间偏差，配合 06:30:00–06:30:05 短宽限重探，毫秒卡点不抢跑、不白等。
 </td>
 <td width="333" valign="top">
-<h3>🧊 模型预加载</h3>
-启动 GUI 后<b>后台异步预热</b> ONNX 模型，避免 6:30 第一次验证码冷启动。<br>
-3-5s 预加载完成，整点出招毫秒级。
+<h3>🎯 实时空座 & 多自习室兜底</h3>
+动态解析 <code>room_id</code> 与全房 <code>seat_id</code> 实时状态，首选直击 + 实时空座筛选，支持 <code>FALLBACK_ROOMS</code> 多自习室顺延，并用 76ms 空座快查跳过满员房。
 </td>
 </tr>
 <tr>
 <td width="333" valign="top">
-<h3>🎯 全自习室扫描</h3>
-首选座位失败后<b>自动随机扫描</b>该自习室剩下的座位，双校区 <b>21 间</b>自习室全覆盖（v5 新增「智慧空间」+281 座位）。
+<h3>🧠 自适应 YOLOv8 + Siamese</h3>
+直接读取接口返回的 <code>wordCheckCount</code>（辅以图像槽位笔迹识别），无缝自适应路由 Click1（非高峰）与 Click3（06:30 高峰），原生 1:1 像素坐标直传。
 </td>
 <td width="333" valign="top">
-<h3>📁 会话级追溯</h3>
-每次抢座生成独立目录：<b>session.log + 4 阶段截图 + MP4 录屏 + 抢座顺序清单</b>。<br>
-出问题打包文件夹就能上报。
+<h3>🛡️ 限流护栏 & 协议漂移熔断</h3>
+内置最小请求间隔 + 随机 Jitter + 空座刷新冷却 + 429 指数退避熔断 + 单会话请求硬顶；检测到黑名单或协议异常立即停止，绝不死循环。
 </td>
 <td width="333" valign="top">
-<h3>⏱️ 毫秒级精确卡点</h3>
-提前 30s 启动浏览器 → 提前 6s 锁定座位 → 整点 06:30:02 提交（<code>time.sleep(2)</code> 等服务端切状态）。<br>
-多账号通过 <code>slot_index × 8s</code> 偏移避免资源争抢。
+<h3>📲 邮件 + 手机 Webhook 秒推</h3>
+成功战报附带<b>预约单号与小票凭证</b>，除内置邮箱通知外，新增自动适配 <b>Bark / PushPlus / Server酱 / 企微 / 飞书 / 钉钉</b> 与通用 JSON Webhook。
 </td>
 </tr>
 <tr>
 <td width="333" valign="top">
-<h3>🧵 双账号多线程</h3>
-两个学号<b>同时跑</b>（<code>MAX_ACCOUNTS=2</code>），分时段无缝衔接（如 9:00-15:00 + 15:00-21:00 = 全天覆盖）。
+<h3>🧵 多账号防撞座协同</h3>
+进程内 <code>SeatClaimCoordinator</code> 自动错开时段重叠的并发账号兜底座；不重叠接力时段（如 9:00-15:00 + 15:00-21:00）允许同抢心仪座。
 </td>
 <td width="333" valign="top">
-<h3>🛡️ 黑名单立即停止</h3>
-检测到「对不起，您已被加入黑名单...」固定文本后<b>立刻退出会话</b>，避免重试加重处罚。
+<h3>📁 轻量脱敏会话追溯</h3>
+每次会话生成独立目录：<code>session.log</code> + <code>抢座顺序.txt</code> + <b>脱敏 <code>http_trace.jsonl</code></b>（绝不落盘密码/Token）+ <b>验证码候选/点击叠加图</b>（&lt; 50KB）。
 </td>
 <td width="333" valign="top">
-<h3>📧 邮件通知</h3>
-抢座成功自动发战报到你邮箱：座位号 / 时段 / 自习室一应俱全。
+<h3>🧊 打包大幅瘦身</h3>
+剔除 Selenium / webdriver-manager / mss 及本地冗余 <code>.pt/.pth</code> 训练权重（仅打 <code>*.onnx</code>），发行包立减 <b>100MB+</b>。
 </td>
 </tr>
 </table>
 
 ---
 
-## 🎬 实战截图秀
+## 🧠 验证码引擎：YOLOv8 + Siamese（v6 升级）
 
-### 立即执行 — 自动登录 + 验证码识别 + 选座全流程
-
-![GUI 立即执行](docs/screenshots/02_gui_main.png)
-
-### 定时模式 — 双账号分时段挂机
-
-- **06:30:00 启动抢座**：
-  ![06:30:00 启动抢座](docs/screenshots/03_gui_scheduled_running.png)
-- **06:30:02 验证码识别与提交**：
-  ![06:30:02 验证码识别与提交](docs/screenshots/04_gui_scheduled_clicking.png)
-- **06:30:05 预约成功**：
-  ![预约成功](docs/screenshots/05_gui_scheduled_success.png)
-
-### 手机即时收到成功通知邮件
-
-<p align="center">
-  <img src="docs/screenshots/06_email_notification.png" width="320" alt="邮件通知">
-</p>
-
----
-
-## 🧠 v5 验证码引擎：YOLOv8 + Siamese
-
-> v5.0.0 取代了 v3 的「图鉴 API + ddddocr」双引擎，全面切到自研本地模型。完整技术细节见 [CAPTCHA_YOLO4_SIAMESE.md](docs/CAPTCHA_YOLO4_SIAMESE.md)。
+> 完整技术细节见 [CAPTCHA_YOLO4_SIAMESE.md](docs/CAPTCHA_YOLO4_SIAMESE.md) 与 [API_PROTOCOL_CONTRACT.md](docs/API_PROTOCOL_CONTRACT.md)。
 >
-> 注：源码里文件名 / 标识符带的 `yolo4`（如 `core/captcha_yolo4_siamese.py`、`_YOLO4_SIAMESE_PRELOADED`）是**内部实验代号**，实际检测骨干是 **YOLOv8**（`yolov8s` / `yolov8n`，训练代码见 `train/`）。
-
-### 工作原理
+> 注：源码里文件名带的 `yolo4`（如 `core/captcha_yolo4_siamese.py`）是历史实验代号，实际检测骨干是 **YOLOv8**（训练代码见 `train/`）。
 
 ```
-DOM 抓图 → base64 解码
+POST /cap/captcha/<token> → 拿 330×160 背景图 + 70×36 目标字图 + wordCheckCount (1 或 3)
         ↓
-   YOLOv8 检测层（core/yolo_onnx.py）
-        ↓ 输出 4 个候选框（置信度 0.05+）
-   Siamese 相似度层
-        ↓ 与目标字符 crop 对比 112×112 输入
-   Top-K 排序 → 点击坐标
+   core/captcha_service.py（自适应路由 Click1 / Click3 + 线程锁）
         ↓
-   ActionChains 点击 + JS 兜底
+   YOLOv8 检测层（core/yolo_onnx.py）→ 4 个候选框
+        ↓
+   Siamese 相似度层（MobileNetV4-Conv-Medium ONNX）→ 1 或 3 个原生像素坐标
+        ↓
+   GET /cap/checkCaptcha (Base64 JSON) → POST /rest/v2/freeBook (multipart/form-data)
 ```
 
-### 关键设计
-
-<table width="1000">
-<tr>
-<td width="500" valign="top">
-<h4>⏰ 时间窗口</h4>
-本地模型仅在 <b>06:30:00 – 06:35:00</b> 5 分钟激活窗口内启用。<br>
-窗口外：直接关闭验证码弹窗换座，节省 CPU。<br>
-<code>logic/booker.py:LOCAL_CAPTCHA_WINDOW_START/END</code>
-</td>
-<td width="500" valign="top">
-<h4>🔒 线程安全</h4>
-模块级锁 <code>_CAPTCHA_SOLVER_LOCK</code> + 全局标志 <code>_YOLO4_SIAMESE_PRELOADED</code>，<br>
-多账号并发推理安全无竞争。
-</td>
-</tr>
-<tr>
-<td width="500" valign="top">
-<h4>📦 模型权重</h4>
-<code>core/checkpoints/</code> 共 <b>7 个文件</b> (~210MB)：<br>
-- 4 个 ONNX（运行时）<br>
-- 2 个 PT + 1 个 PTH（源码，可重训）
-</td>
-<td width="500" valign="top">
-<h4>🧠 自训练支持</h4>
-<code>model/siamese_dataloader.py</code> + <code>model/siamese_model.py</code><br>
-基于 MobileNetV4-Conv-Medium + 自定义融合头<br>
-特征维度 1280，融合层 5120→512→128→1
-</td>
-</tr>
-</table>
-
-### v3 vs v5 性能对比
-
-| 指标 | v3 图鉴 API | v3 ddddocr | **v5 YOLOv8+Siamese** |
-|------|-------------|------------|----------------------|
-| 单次识别延迟 | 7.21s | 0.51s | 待回测（预计 < 1s） |
-| 单次准确率 | 100% | 61.2% | **Click1 83.48%**（端到端） |
-| 累计 5 次内通过率 | 100% | 100% | 待回测 |
-| 联网依赖 | ✅ 强 | ❌ 无 | ❌ 无 |
-| 单次成本 | 0.016 元 | 0 元 | 0 元 |
-
-完整 v5 实测数据：[V5_PERFORMANCE.md](docs/V5_PERFORMANCE.md)。
+- **登录图形码**：由 [core/captcha.py](core/captcha.py)（`ddddocr`）毫秒级自动识别 `GET /auth/createCaptcha`。
+- **点选验证码**：GUI/CLI 启动后后台异步预热 Click1 + Click3 ONNX（约 2s），实测单次 Click1 推理仅 **~62ms**。
 
 ---
 
 ## ☕ 求赞助 — 支持持续开发
 
 > [!NOTE]
-> v5.0.0 让 LNU-LibSeat 彻底摆脱了商业 API 的成本压力。
-> 但作者仍在为大家**维护、训练新模型、修 bug**——
-> **随手扫码赞助**就是最大的鼓励 ❤️
+> v5 告别了付费验证码 API，v6 彻底告别了笨重浏览器并迎来 0.55s 纯 API 时代。
+> 作者仍在持续**维护、迭代模型与打磨新特性**——**随手扫码赞助**就是最大的鼓励 ❤️
 
 <table align="center" border="0" cellspacing="0">
 <tr>
 <td width="300" align="center" valign="middle">
   <b>☕ 你的赞助将用于</b><br>
-  <b>模型训练 · 测试</b><br>
+  <b>模型训练 · 协议适配 · 测试</b><br>
   <sub>让免费持续 ❤️</sub>
 </td>
 <td align="center"><img src="wechat_pay.png" width="260" alt="微信支付赞助码"><br><b>微信支付</b></td>
@@ -315,67 +241,43 @@ DOM 抓图 → base64 解码
 ## 🛟 高频 FAQ
 
 <details>
-<summary><b>Q1: 我一点 Python 都不懂，能用吗？</b></summary>
+<summary><b>Q1: 我一点 Python 都不懂，需要装 Chrome / Edge 吗？</b></summary>
 
-✅ 完全没问题。下载 [Releases](https://github.com/XUNRANA/LNU-LibSeat-Automation/releases/latest) 里的 zip，解压双击 exe 即可。**全程不需要打开任何代码编辑器**。
+✅ **什么都不用装**。v6 已彻底移除浏览器依赖：下载 [Releases](https://github.com/XUNRANA/LNU-LibSeat-Automation/releases/latest) 里的 zip，解压双击 `LNU-LibSeat.exe`（macOS 右键 `.command` 首启 `.app`）即可。
 </details>
 
 <details>
-<summary><b>Q2: v5 的验证码识别要联网吗？要不要付费？</b></summary>
+<summary><b>Q2: 我是 v5 老用户，原来的 config.py 还能直接用吗？</b></summary>
 
-❌ **完全不需要联网，零付费**。
-
-v5 切换到自研 **YOLOv8+Siamese 本地模型**，权重内置在 exe 的 `_internal/core/checkpoints/` 下（~210MB）。
-
-⏰ 模型仅在 **06:30:00–06:35:00** 自动启用——其他时段不识别验证码（节省 CPU）。错峰抢座请见 [CAPTCHA_YOLO4_SIAMESE.md](docs/CAPTCHA_YOLO4_SIAMESE.md)。
+✅ **完全兼容**。把旧 `config.py` 复制到 v6 目录即可直接运行，旧的 `BROWSER` / `DRIVER_PATH` / `WEBDRIVER_CACHE` 字段会被自动静默忽略。详情见 [v5 → v6 升级指南](docs/MIGRATION_V5_TO_V6.md)。
 </details>
 
 <details>
 <summary><b>Q3: 抢座失败了怎么排查？</b></summary>
 
 打开 `logs/sessions/<时间戳>_<学号>/` 文件夹，里面有：
-- `session.log` — 仅本次会话的完整日志
-- `抢座顺序.txt` — 这次准备试哪些座位
-- `*_1_captcha_popup_*.png` — 验证码弹窗截图
-- `*_2_text_clicked_*.png` — 点击文字后截图
-- `*_3_confirm_clicked_*.png` — 点击确定后截图
-- `*_4_result_*.png` — 结果截图
-- `recordings/*.mp4` — 全程录屏
+- `session.log` — 本次会话完整日志
+- `抢座顺序.txt` — 本次实时空座统计与尝试队列
+- `http_trace.jsonl` — 脱敏 HTTP 请求/响应流水（密码、Token、Cookie 已自动抹除）
+- `*_captcha_*.png` — 目标字 + 背景图 + YOLO 候选绿圈 + 点击红点叠加诊断图
 
-把这个文件夹打包发给作者就行，比口头描述清楚 100 倍。
+打包发给作者或在 Issue 附上脱敏日志即可快速定位。
 </details>
 
 <details>
-<summary><b>Q4: 电脑会被休眠吗？10 小时挂机靠谱吗？</b></summary>
+<summary><b>Q4: 怎么配手机端即时推送（Webhook）？</b></summary>
 
-🛡️ 不会。GUI 启动时通过 `ui_qt/services/prevent_sleep.py` 自动调用 `SetThreadExecutionState` 申请系统唤醒权限，**全程禁止系统休眠**——支持 10 小时以上挂机不断网。每 30 秒发送一次防休眠信号，60 秒空闲自动鼠标抖动。
-程序结束后自动恢复正常休眠策略。
+在 GUI 账号卡片的「**手机推送**」框（或 `config.py` 的 `WEBHOOK_URL`）直接粘贴对应渠道 URL 即可自动识别：
+- **Bark（iOS）**：`https://api.day.app/<你的DeviceKey>/`
+- **PushPlus（微信）**：`https://www.pushplus.plus/send?token=<你的Token>`
+- **Server酱（微信）**：`https://sctapi.ftqq.com/<你的SendKey>.send`
+- **企业微信 / 飞书 / 钉钉群机器人**：直接粘贴机器人 Webhook 地址
 </details>
 
 <details>
-<summary><b>Q5: 怎么做到每天自动跑（无人值守）？</b></summary>
+<summary><b>Q5: 电脑会被休眠吗？怎么做到每天无人值守？</b></summary>
 
-用 Windows 任务计划程序：
-1. Win+R → `taskschd.msc`
-2. 创建基本任务，触发器设**每天 00:15**（程序内部会自己等到 06:29:30 再启动浏览器）
-3. 操作选 `LNU-LibSeat.exe`
-4. 勾选**「唤醒计算机以运行此任务」**
-
-之后电脑就算睡眠也能定时醒来抢座。
-</details>
-
-<details>
-<summary><b>Q6: 我是 v3 老用户，要怎么升 v5？</b></summary>
-
-看 [v3→v5 升级指南](docs/MIGRATION_V3_TO_V5.md)。
-- **EXE 用户**：下新 zip 解压，3 分钟搞定
-- **源码用户**：`git pull` + `pip uninstall customtkinter` + `pip install -r requirements.txt` + `python gui_qt.py`
-</details>
-
-<details>
-<summary><b>Q7: GUI 启动后日志有「模型预加载」字样是正常的吗？</b></summary>
-
-✅ 完全正常。v5 启动 GUI 后立即在后台异步预热 YOLOv8+Siamese 模型（约 3-5s），避免抢座时刻冷启动延迟。不阻塞你填表 / 点开始按钮。
+🛡️ GUI 启动时通过 `ui_qt/services/prevent_sleep.py` 自动申请系统防休眠权限，支持整晚挂机不断网；也可以用 Windows 任务计划程序（`taskschd.msc`）设每天 `06:25` 唤醒电脑运行 `LNU-LibSeat.exe`。
 </details>
 
 ---
@@ -385,31 +287,31 @@ v5 切换到自研 **YOLOv8+Siamese 本地模型**，权重内置在 exe 的 `_i
 <table width="1000">
 <tr>
 <td align="center" width="250">
-<h3>📘</h3>
-<a href="docs/QUICKSTART.md"><b>快速上手</b></a><br>
-<sub>从零开始的完整使用教程</sub>
-</td>
-<td align="center" width="250">
 <h3>🚀</h3>
-<a href="docs/MIGRATION_V3_TO_V5.md"><b>v3→v5 升级指南</b></a><br>
-<sub>老用户必读</sub>
+<a href="docs/MIGRATION_V5_TO_V6.md"><b>v5 → v6 升级指南</b></a><br>
+<sub>v5 老用户无缝迁移必读</sub>
 </td>
 <td align="center" width="250">
 <h3>📦</h3>
-<a href="docs/RELEASE_NOTES_V5.md"><b>v5.0.0 升级日志</b></a><br>
-<sub>3 大重构 + 6 项强化</sub>
+<a href="docs/RELEASE_NOTES_V6.md"><b>v6.0.0 发布说明</b></a><br>
+<sub>纯 API 重构与实测亮点</sub>
+</td>
+<td align="center" width="250">
+<h3>🔌</h3>
+<a href="docs/API_PROTOCOL_CONTRACT.md"><b>纯 API 协议契约</b></a><br>
+<sub>脱敏端点、签名与字段参考</sub>
 </td>
 <td align="center" width="250">
 <h3>⚙️</h3>
 <a href="docs/CONFIGURATION.md"><b>配置详解</b></a><br>
-<sub>config.py 各字段说明</sub>
+<sub>config.py 全字段说明</sub>
 </td>
 </tr>
 <tr>
 <td align="center" width="250">
 <h3>🏗️</h3>
 <a href="docs/ARCHITECTURE.md"><b>架构文档</b></a><br>
-<sub>开发者向：模块 / 流程 / 决策</sub>
+<sub>v6 纯 API 四层解耦架构</sub>
 </td>
 <td align="center" width="250">
 <h3>🧠</h3>
@@ -422,9 +324,9 @@ v5 切换到自研 **YOLOv8+Siamese 本地模型**，权重内置在 exe 的 `_i
 <sub>PySide6 模块拆分</sub>
 </td>
 <td align="center" width="250">
-<h3>🔀</h3>
-<a href="docs/BOOKING_FLOWCHART.md"><b>抢座流程图</b></a><br>
-<sub>11 张 Mermaid 流程图</sub>
+<h3>📘</h3>
+<a href="docs/QUICKSTART.md"><b>快速上手</b></a><br>
+<sub>从零开始的完整使用教程</sub>
 </td>
 </tr>
 <tr>
@@ -436,17 +338,17 @@ v5 切换到自研 **YOLOv8+Siamese 本地模型**，权重内置在 exe 的 `_i
 <td align="center" width="250">
 <h3>🔢</h3>
 <a href="docs/NUMERIC_PARAMETERS.md"><b>数字参数</b></a><br>
-<sub>所有超时/延迟/阈值清单</sub>
-</td>
-<td align="center" width="250">
-<h3>📊</h3>
-<a href="docs/V5_PERFORMANCE.md"><b>v5 性能基准</b></a><br>
-<sub>实测数据 / 对比表</sub>
+<sub>超时 / 延迟 / 阈值清单</sub>
 </td>
 <td align="center" width="250">
 <h3>📜</h3>
-<a href="docs/RELEASE_NOTES.md"><b>v3.0.0 历史</b></a><br>
-<sub>历史 release notes</sub>
+<a href="CHANGELOG.md"><b>更新日志</b></a><br>
+<sub>各版本完整变更记录</sub>
+</td>
+<td align="center" width="250">
+<h3>🗂️</h3>
+<a href="docs/README.md"><b>全部文档索引</b></a><br>
+<sub>含 v3/v5 历史档案</sub>
 </td>
 </tr>
 </table>
@@ -456,100 +358,71 @@ v5 切换到自研 **YOLOv8+Siamese 本地模型**，权重内置在 exe 的 `_i
 ## 🛠️ 开发者：从源码运行 / 自己打包
 
 <details>
-<summary><b>Python 源码运行</b></summary>
+<summary><b>Python 源码运行与测试</b></summary>
 
 ```powershell
 git clone https://github.com/XUNRANA/LNU-LibSeat-Automation
 cd LNU-LibSeat-Automation
-.\run.bat        # 首次运行会自动创建 venv 并装依赖
-```
-
-或手动：
-
-```powershell
 python -m venv .venv
 .\.venv\Scripts\activate
 pip install -r requirements.txt
-python gui_qt.py        # v5 入口（v3 是 gui.py）
+python gui_qt.py        # 桌面 GUI
+# 或 python main.py     # 纯 CLI 无界面运行
 ```
 
-跑测试（`smoke` 用例需真实浏览器，日常用 `not smoke` 跳过，与 CI 一致）：
+跑离线单元测试与 lint（全套纯离线，无需浏览器）：
 
 ```powershell
 pip install pytest ruff
-pytest -m "not smoke"
+pytest tests/ -q
+ruff check .
 ```
 </details>
 
 <details>
 <summary><b>PyInstaller 打包：Windows（.exe）/ macOS（.app）</b></summary>
 
-**Windows（产出 `.exe`）：**
-
-```powershell
-python build.py
-```
-
-`build.py` 会自动创建一个隔离的临时 venv，仅安装 PySide6 / selenium / onnxruntime / ddddocr 等必需依赖，打包后清理。
-
-输出：
-- `dist/LNU-LibSeat-v5.0.0/` — 可分发的完整文件夹
-- `dist/LNU-LibSeat-v5.0.0.zip` — 上传 GitHub Release 时改名为 `LNU-LibSeat-v5.0.0-Windows-x86_64.zip`
-
-**macOS（产出 `.app`，必须在 Mac 上运行）：**
-
-```bash
-python3 build_mac.py
-```
-
-PyInstaller 不能跨平台编译——`.app` 只能在 macOS 上构建（本地 Mac，或 GitHub Actions 的 `macos-14` runner）。仓库已内置 `.github/workflows/build-macos.yml`：推送 `v*` 标签会自动在云端构建并把 `*-macOS-*.zip` 挂到对应 Release。产物 `dist/LNU-LibSeat-v5.0.0-macOS-<arch>.zip` 内含 `.app` + 外置可编辑 `config.py` + `info/` + `首次运行请先双击我.command` + 使用说明。
+- **Windows**：`python build.py` → 产出 `dist/LNU-LibSeat-v6.0.0/` 与 `.zip`
+- **macOS**（需在 Mac 上 `git clone` 后运行）：`python3 build_mac.py` → 产出 `dist/LNU-LibSeat-v6.0.0-macOS-<arch>.zip`
+- 云端构建工作流 `.github/workflows/build-windows.yml` / `build-macos.yml` 仅保留手动触发（`workflow_dispatch`），推 tag 不会自动触发云端打包。
+- `build.py` / `build_mac.py` 已自动排除 `.pt/.pth` 训练权重，仅随包打包 4 个运行时 `*.onnx`。
 </details>
 
 <details>
-<summary><b>项目结构（v5）</b></summary>
+<summary><b>项目结构（v6）</b></summary>
 
 ```
 LNU-LibSeat-Automation/
-├── gui_qt.py                   # 🖥️ GUI 入口（PySide6，8 行）
-├── ui_qt/                      # 🎨 GUI 模块（23 个文件）
-│   ├── app.py                  #   MainWindow
-│   ├── theme.py                #   全局主题
-│   ├── panels/                 #   ConfigPanel + DashboardPanel
-│   ├── widgets/                #   11 个复用组件
-│   ├── workers/                #   后台 Worker 线程
-│   └── services/               #   配置 I/O + 防休眠
-├── main.py                     # 多线程调度 + 单浏览器会话策略
-├── config.py                   # ⚙️ 配置（GUI 自动生成）
-├── run.bat                     # 一键启动
-├── build.py                    # 📦 PyInstaller 打包
-├── requirements.txt            # PySide6 / onnxruntime / selenium / ddddocr ...
-├── info/                       # 📋 双校区 21 间自习室座位索引
-│   └── 智慧空间.txt            #   ← v5 新增（蒲河校区）
-├── core/                       # 🛠️ 基础设施层
-│   ├── driver.py               #   WebDriver 管理
-│   ├── captcha.py              #   ddddocr 登录验证码（保留）
-│   ├── captcha_yolo4_siamese.py        # 🆕 Click3 求解
-│   ├── captcha_click1_yolo4_siamese.py # 🆕 Click1 求解
-│   ├── yolo_onnx.py            # 🆕 ONNX 通用推理
-│   ├── checkpoints/            # 🆕 7 个模型权重 (~210MB)
-│   ├── captcha_api.py          #   图鉴 API（保留备份，默认不用）
-│   ├── screen_recorder.py      #   浏览器录屏
-│   ├── logger.py               #   日志系统
-│   ├── notifications.py        #   SMTP 邮件
-│   └── utils.py                #   时间工具
-├── logic/                      # 🧠 业务逻辑层
-│   ├── auth.py                 #   自动登录
-│   ├── navigator.py            #   校区/自习室切换
-│   ├── booker.py               #   选座 + 验证码 + 提交 + 结果检测
-│   └── result_classifier.py    #   预约结果分类（纯函数，可单测）
-├── model/                      # 🧪 Siamese 模型定义 + 数据加载（训练用，运行时不需要）
-│   ├── siamese_model.py
-│   └── siamese_dataloader.py
-├── train/                      # 🏋️ 验证码模型训练管线（采集→标注→YOLO→Siamese→评估→导出，见 train/README.md）
-├── tests/                      # ✅ pytest 单元测试（默认 -m "not smoke" 跳过真机用例）
-├── pyproject.toml              # 工具配置集中（ruff / pytest / mypy）
-├── .github/workflows/          # 🔄 CI：push/PR 跑 pytest + ruff；打 v* 标签构建 macOS .app
-└── docs/                       # 📖 文档
+├── gui_qt.py                        # 🖥️ PySide6 GUI 入口
+├── ui_qt/                           # 🎨 模块化桌面界面（panels / widgets / workers / services）
+├── main.py                          # 🚀 CLI 入口（委托 logic.orchestrator）
+├── config.example.py                # ⚙️ 配置模板（支持 FALLBACK_ROOMS / WEBHOOK_URL）
+├── build.py / build_mac.py          # 📦 Windows & macOS 隔离 venv 打包脚本
+├── requirements.txt                 # requests / pycryptodome / ddddocr / onnxruntime / PySide6
+├── info/                            # 📋 双校区 21 间自习室离线座号预览索引
+├── core/                            # 🛠️ 协议与基础设施层（零 Selenium）
+│   ├── protocol.py                  #   端点常量 / baseUrl.js Global 动态解析 / 协议漂移异常
+│   ├── api_crypto.py                #   AES-128-CBC 登录凭据加密 + HMAC-SHA256 签名头
+│   ├── libseat_client.py            #   强类型 LibSeatClient Protocol + requests 连接池实现
+│   ├── clock_sync.py                #   HTTP Date + RTT/2 服务端时钟校准
+│   ├── rate_limiter.py              #   请求最小间隔 / Jitter / 空座冷却 / 429 熔断
+│   ├── captcha_service.py           #   Click1 + Click3 统一自适应路由 + 线程锁 + 预热
+│   ├── captcha.py                   #   ddddocr 登录 4 位图形验证码
+│   ├── captcha_yolo4_siamese.py     #   Click3 求解器
+│   ├── captcha_click1_yolo4_siamese.py # Click1 求解器
+│   ├── yolo_onnx.py                 #   YOLOv8 ONNX 推理封装
+│   ├── checkpoints/                 #   4 个运行时 ONNX 权重
+│   ├── session_recorder.py          #   脱敏 http_trace.jsonl + 验证码叠加诊断图
+│   ├── notifications.py             #   SMTP 邮件 + 手机端 Webhook 推送
+│   ├── logger.py / paths.py / utils.py
+├── logic/                           # 🧠 纯 API 业务编排层
+│   ├── orchestrator.py              #   多账号调度 / 维护期重连 / Token 过期自动重登
+│   ├── booker.py                    #   ApiSeatBooker（首选直击 / 实时空座 / 多房兜底 / 宽限重试）
+│   ├── seat_strategy.py             #   实时空座排序 / FALLBACK_ROOMS / 多账号防撞座协调器
+│   └── result_classifier.py         #   纯函数预约结果分类（含 seat_taken / not_open_yet）
+├── model/ & train/                  # 🏋️ 验证码模型定义与完整自训练管线
+├── tests/                           # ✅ 全套离线单元测试（pytest，零浏览器依赖）
+└── docs/                            # 📖 架构 / 协议契约 / 迁移指南 / 发布说明
 ```
 </details>
 
@@ -573,17 +446,15 @@ LNU-LibSeat-Automation/
 
 本项目仅供**技术交流与学习**，请严格遵守学校图书馆规定。
 - 请准时到馆签到，避免被列入黑名单
+- 请勿修改或绕过内置限流保护对学校服务器发起高频请求
 - 请勿将抢到的座位转售或用于其他商业目的
 - **所有使用后果由使用者自行承担**
 
 ## 🙏 致谢
 
-本项目站在两位前人的肩膀上完成，特别感谢：
-
-- **[geTiger/get_LibSeat](https://github.com/geTiger/get_LibSeat)** — 辽宁大学图书馆抢座的最早开源实现，本项目最初的抢座流程、表单字段、接口调用思路均参考自此项目。没有 geTiger 的开源，这个项目可能根本不会出现。
-- **[MgArcher/Text_select_captcha](https://github.com/MgArcher/Text_select_captcha)** — 文字点选验证码识别的开源方案，本项目自研的 **YOLO + Siamese 双阶段管线**（[`core/captcha_yolo4_siamese.py`](core/captcha_yolo4_siamese.py)）的整体架构、`Siamese MobileNetV4` 模型设计、`plan + bg` 合成图训练范式都源自这个项目。v5.0.0 能彻底告别付费 API、走纯本地 ONNX 推理，要把最大的一份感谢给 MgArcher。
-
-如果你觉得本项目有用，**也请去给上面两个仓库点个 Star** ⭐。
+- **[geTiger/get_LibSeat](https://github.com/geTiger/get_LibSeat)** — 辽宁大学图书馆抢座的最早开源实现，项目最初的流程与思路参考自此。
+- **[MgArcher/Text_select_captcha](https://github.com/MgArcher/Text_select_captcha)** — 文字点选验证码识别开源方案，自研 **YOLOv8 + Siamese** 管线架构源自此项目。
+- **[@MorinGale](https://github.com/MorinGale)** — 在 [Issue #4](https://github.com/xunrana/LNU-LibSeat-Automation/issues/4) 中率先提出并实测验证了纯 API 路线，直接促成了 v6.0.0 的诞生。
 
 ## 📄 License
 
@@ -595,6 +466,6 @@ LNU-LibSeat-Automation/
 
 **如果这个项目帮到了你，请给个 ⭐ Star 鼓励作者持续维护！**
 
-[⭐ 给项目加星](https://github.com/XUNRANA/LNU-LibSeat-Automation) · [☕ 赞助一杯奶茶](#-求赞助--支持持续开发) · [🐛 反馈 Bug](https://github.com/XUNRANA/LNU-LibSeat-Automation/issues) · [📦 v5.0.0 升级日志](docs/RELEASE_NOTES_V5.md)
+[⭐ 给项目加星](https://github.com/XUNRANA/LNU-LibSeat-Automation) · [☕ 赞助一杯奶茶](#-求赞助--支持持续开发) · [🐛 反馈 Bug](https://github.com/XUNRANA/LNU-LibSeat-Automation/issues) · [📦 v6.0.0 发布说明](docs/RELEASE_NOTES_V6.md)
 
 </div>

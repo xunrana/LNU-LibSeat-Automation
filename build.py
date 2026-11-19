@@ -25,16 +25,16 @@ import venv
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 APP_NAME = "LNU-LibSeat"
-APP_VERSION = "v5.0.0"  # 每次发布新版本请修改此处
+APP_VERSION = "v6.0.0"  # 每次发布新版本请修改此处
 DIST_NAME = f"{APP_NAME}-{APP_VERSION}"
 DIST_DIR = os.path.join(ROOT, "dist", DIST_NAME)
 VENV_DIR = os.path.join(ROOT, ".build_venv")
 
-# Only these packages (and their dependencies) go into the exe
+# Only these packages (and their dependencies) go into the exe (zero Selenium / browser deps!)
 BUILD_DEPS = [
-    "pyinstaller", "PySide6", "selenium", "ddddocr",
+    "pyinstaller", "PySide6", "ddddocr",
     "opencv-python", "numpy", "onnxruntime", "Pillow",
-    "requests", "webdriver-manager",
+    "requests", "pycryptodome",
 ]
 
 
@@ -95,7 +95,7 @@ def build():
         # Bundle these packages with their native libs / data files
         "--collect-all", "ddddocr",
         "--collect-all", "onnxruntime",
-        "--collect-all", "selenium",
+        "--collect-all", "Crypto",
         "--collect-all", "PySide6",
         "--collect-all", "cv2",
         "--collect-all", "numpy",
@@ -151,14 +151,18 @@ def build():
         shutil.copytree(src_info, dst_info)
         print("[OK] info/ directory copied to distribution folder")
 
-    # Copy core/checkpoints/ (ONNX models for captcha solving)
+    # Copy core/checkpoints/ (ONLY *.onnx runtime models; skip local *.pt/*.pth training weights!)
     src_ckpts = os.path.join(ROOT, "core", "checkpoints")
     dst_ckpts = os.path.join(DIST_DIR, "_internal", "core", "checkpoints")
     if os.path.exists(src_ckpts):
         if os.path.exists(dst_ckpts):
             shutil.rmtree(dst_ckpts)
-        shutil.copytree(src_ckpts, dst_ckpts)
-        print("[OK] core/checkpoints/ copied to distribution folder")
+        shutil.copytree(
+            src_ckpts,
+            dst_ckpts,
+            ignore=shutil.ignore_patterns("*.pt", "*.pth", ".claude", "__pycache__"),
+        )
+        print("[OK] core/checkpoints/*.onnx copied to distribution folder")
 
     # Create logs directory
     os.makedirs(os.path.join(DIST_DIR, "logs"), exist_ok=True)
@@ -167,7 +171,7 @@ def build():
     # Write a clean config template (NEVER ship personal data)
     clean_config = '''\
 # ===================================================================
-# LNU-LibSeat-Automation 配置文件 (由 GUI 自动保存)
+# LNU-LibSeat-Automation v6 配置文件 (由 GUI 自动保存，纯 API 模式)
 # ===================================================================
 
 USERS = {
@@ -179,16 +183,17 @@ USERS = {
 
 TARGET_CAMPUS = "崇山校区图书馆"
 TARGET_ROOM = "三楼智慧研修空间"
+FALLBACK_ROOMS = []
 PREFER_SEATS = []
 
 WAIT_FOR_0630 = False
 MAX_ACCOUNTS = 2
 
-BROWSER = "edge"
-DRIVER_PATH = ""
-WEBDRIVER_CACHE = ""
+API_BASE_URL = "http://libseat.lnu.edu.cn"
+API_FIRE_OFFSET_MS = 200
 
 RECEIVER_EMAIL = ""
+WEBHOOK_URL = ""
 SMTP_USER = ""
 SMTP_PASS = ""
 

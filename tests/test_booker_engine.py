@@ -1,254 +1,385 @@
-"""抢座引擎核心 helper 单测。
+"""v6 纯 API 抢座引擎、编排器与配置兼容性单元测试（100% 离线，零浏览器依赖）。"""
+from __future__ import annotations
 
-覆盖本轮"4 个超长方法行为等价拆分"抽出的 helper，给抢座主链路补上回归网：
-  - logic.booker.SeatBooker._flash_detect_after_submit  (Commit 4)
-  - logic.booker.SeatBooker._scan_fast_fail_page         (Commit 2)
-  - main._relock_if_popup_gone / _refresh_or_note_autorefresh (Commit 3)
-  - main._setup_session_dir / _export_session_log        (Commit 1)
-  - main._terminal_outcome_from_result                   (既有纯映射)
-
-全部用轻量 fake（无真实浏览器），与 tests/test_booker_result_detection.py 同风格。
-"""
-import logging
 import os
-
-from selenium.webdriver.common.by import By
+import threading
+from datetime import datetime, timedelta, timezone
+from unittest import mock
 
 import main
-from logic.booker import SeatBooker
-
-# 真实黑名单文案（与 test_booker_result_detection.py 中一致，命中整段正则）
-BLACKLIST_TEXT = (
-    "对不起，您已被加入黑名单，预约权限将在2026年05月11日恢复。"
-    " 原因：7天内迟到违约，超过3次，加入黑名单7天"
+from core.captcha_service import CaptchaService, CaptchaSolveOutcome
+from core.clock_sync import BJ_TZ, ClockSync
+from core.libseat_client import (
+    BookResponse,
+    ClickCaptchaChallenge,
+    ClickCaptchaCheckResult,
+    FiltersData,
+    LoginResponse,
+    ReservationRecord,
+    RoomInfo,
+    RoomStats,
+    UserProfile,
 )
+from core.protocol import GlobalConfig, TokenExpiredError
+from core.rate_limiter import RateLimiter, RateLimiterConfig
+from logic.booker import ApiSeatBooker
+from logic.orchestrator import run_api_session
+from logic.seat_strategy import SeatCandidate, SeatClaimCoordinator
+from ui_qt.services import config_io
 
 
-class FakeElement:
-    def __init__(self, text="", displayed=True):
-        self.text = text
-        self._displayed = displayed
+class _FakeCaptchaService(CaptchaService):
+    def __init__(self, outcomes: list[CaptchaSolveOutcome] | None = None):
+        super().__init__()
+        self._outcomes = list(outcomes or [])
 
-    def is_displayed(self):
-        return self._displayed
-
-
-class FakeDriver:
-    def __init__(self, elements_by_selector=None, page_source=""):
-        self.elements_by_selector = elements_by_selector or {}
-        self.page_source = page_source
-
-    def find_elements(self, by, selector):
-        return self.elements_by_selector.get((by, selector), [])
+    def solve(self, target_bytes, bg_bytes, *, kind=None, hint_count=None, now=None):
+        if self._outcomes:
+            return self._outcomes.pop(0)
+        pts = ((10, 20), (30, 40), (50, 60)) if hint_count == 3 else ((120, 80),)
+        return CaptchaSolveOutcome(ok=True, kind="click3" if hint_count == 3 else "click1", points=pts)
 
 
-def make_booker(driver=None, *, popup_present=False):
-    """构造一个仅含被测方法所需状态的 SeatBooker（绕过 __init__）。"""
-    booker = SeatBooker.__new__(SeatBooker)
-    booker.driver = driver
-    booker.account = "testacc"
-    booker.log = logging.getLogger("test_booker_engine")
-    booker.last_lock_failure_reason = ""
-    booker.last_stop_reason = ""
-    booker.last_booking_result_status = ""
-    booker.last_booking_result_text = ""
-    booker.last_captcha_auto_refreshed = False
-    # 隔离副作用：截图设为 no-op，弹窗探测/关闭可控
-    booker._save_screenshot = lambda tag="step": None
-    booker.is_captcha_popup_present = lambda: popup_present
-    booker.close_popup_calls = []
-    booker.close_popup = lambda: booker.close_popup_calls.append(True)
-    return booker
+class _FakeLibSeatClient:
+    def __init__(
+        self,
+        *,
+        login_responses: list[LoginResponse] | None = None,
+        active_reservations: list[ReservationRecord] | None = None,
+        rooms: dict[tuple[str, str], RoomInfo] | None = None,
+        seats_by_room: dict[str, list[SeatCandidate]] | None = None,
+        stats_by_building: dict[str, list[RoomStats]] | None = None,
+        book_results: list[BookResponse | Exception] | None = None,
+        check_results: list[ClickCaptchaCheckResult] | None = None,
+        word_check_count: int = 3,
+        now_utc: datetime | None = None,
+    ):
+        self._clock = ClockSync(now_utc_fn=(lambda: now_utc) if now_utc else None)
+        self._limiter = RateLimiter(
+            RateLimiterConfig(min_interval_ms=0.0, jitter_ms=0.0, backoff_base_s=0.0, seat_refresh_cooldown_s=0.0),
+            sleep_fn=lambda _: None,
+        )
+        self._login_responses = list(
+            login_responses
+            or [LoginResponse(ok=True, token="t" * 48, profile=UserProfile("38497", "20240001"))]
+        )
+        self._active_reservations = list(active_reservations or [])
+        self._rooms = rooms or {
+            ("崇山校区图书馆", "三楼智慧研修空间"): RoomInfo("崇山校区图书馆", "三楼智慧研修空间", "2", "30"),
+            ("崇山校区图书馆", "四楼南自习室"): RoomInfo("崇山校区图书馆", "四楼南自习室", "2", "24"),
+        }
+        self._seats_by_room = seats_by_room or {
+            "30": [
+                SeatCandidate("8", "17293", "30", "free"),
+                SeatCandidate("9", "17294", "30", "occupied"),
+                SeatCandidate("10", "17295", "30", "free"),
+            ],
+            "24": [
+                SeatCandidate("194", "20194", "24", "free"),
+            ],
+        }
+        self._stats_by_building = stats_by_building or {
+            "2": [
+                RoomStats("30", "三楼智慧研修空间", total_seats=3, free_seats=2),
+                RoomStats("24", "四楼南自习室", total_seats=1, free_seats=1),
+            ]
+        }
+        self._book_results = list(book_results or [BookResponse(status="success", seat_no="8", reservation_id="4666692", receipt="7222-692-4")])
+        self._check_results = list(check_results or [])
+        self._word_check_count = word_check_count
+
+        self.booked_seat_ids: list[str] = []
+        self.login_calls = 0
+        self.keepalive_calls = 0
+        self.closed = False
+
+    @property
+    def clock_sync(self) -> ClockSync:
+        return self._clock
+
+    @property
+    def rate_limiter(self) -> RateLimiter:
+        return self._limiter
+
+    def bootstrap_global(self, stop_event=None):
+        return GlobalConfig()
+
+    def login(self, account, password, *, stop_event=None, max_attempts=6):
+        self.login_calls += 1
+        return self._login_responses.pop(0) if len(self._login_responses) > 1 else self._login_responses[0]
+
+    def keepalive(self, stop_event=None):
+        self.keepalive_calls += 1
+        return True
+
+    def list_active_reservations(self, stop_event=None):
+        return list(self._active_reservations)
+
+    def fetch_filters(self, stop_event=None):
+        return FiltersData()
+
+    def list_room_stats(self, building_id, date_str, *, stop_event=None):
+        return list(self._stats_by_building.get(building_id, []))
+
+    def resolve_room(self, campus_name, room_name, date_str, *, stop_event=None):
+        return self._rooms.get((campus_name, room_name))
+
+    def list_room_seats(self, room_id, date_str, *, stop_event=None):
+        return list(self._seats_by_room.get(room_id, []))
+
+    def fetch_click_captcha(self, *, stop_event=None):
+        return ClickCaptchaChallenge(
+            token="c" * 32,
+            word_check_count=self._word_check_count,
+            target_bytes=b"target",
+            bg_bytes=b"bg",
+        )
+
+    def check_click_captcha(self, challenge, points, *, stop_event=None):
+        if self._check_results:
+            return self._check_results.pop(0)
+        return ClickCaptchaCheckResult(ok=True)
+
+    def free_book(
+        self,
+        *,
+        seat_id,
+        seat_no,
+        start_time,
+        end_time,
+        date_str,
+        authid,
+        in_open_grace_window=False,
+        stop_event=None,
+    ):
+        self.booked_seat_ids.append(seat_id)
+        item = self._book_results.pop(0) if len(self._book_results) > 1 else self._book_results[0]
+        if isinstance(item, Exception):
+            raise item
+        return BookResponse(
+            status=item.status,
+            message=item.message,
+            seat_no=seat_no,
+            reservation_id=item.reservation_id,
+            receipt=item.receipt,
+            not_open_yet=item.not_open_yet,
+            rate_limited=item.rate_limited,
+        )
+
+    def cancel_reservation(self, reservation_id, *, stop_event=None):
+        return True
+
+    def close(self):
+        self.closed = True
 
 
-# ───────────────── _flash_detect_after_submit (Commit 4) ─────────────────
-
-def test_flash_detect_captcha_wrong_with_popup_marks_autorefresh():
-    booker = make_booker(popup_present=True)
-    assert booker._flash_detect_after_submit("提示：验证码错误，请重试") is False
-    assert booker.last_captcha_auto_refreshed is True
+def _instant_wait(_target, _account, stop_event, _stage, _now_fn=None):
+    return not stop_event.is_set()
 
 
-def test_flash_detect_captcha_wrong_without_popup_no_autorefresh():
-    booker = make_booker(popup_present=False)
-    assert booker._flash_detect_after_submit("验证码错误") is False
-    assert booker.last_captcha_auto_refreshed is False
+# ───────────────── ApiSeatBooker 核心状态机测试 ─────────────────
 
-
-def test_flash_detect_blacklist_sets_stop_reason():
-    booker = make_booker()
-    assert booker._flash_detect_after_submit(BLACKLIST_TEXT) is False
-    assert booker.last_stop_reason == "黑名单"
-
-
-def test_flash_detect_success_returns_true():
-    booker = make_booker()
-    assert booker._flash_detect_after_submit("预约成功！座位已锁定") is True
-    assert booker.last_booking_result_status == "success"
-
-
-def test_flash_detect_stop_keyword_returns_false():
-    # "有效预约" 经 classify → stop
-    booker = make_booker()
-    assert booker._flash_detect_after_submit("您已有有效预约") is False
-    assert booker.last_stop_reason == "有效预约"
-
-
-def test_flash_detect_no_terminal_returns_none():
-    booker = make_booker()
-    assert booker._flash_detect_after_submit("") is None
-    assert booker._flash_detect_after_submit("页面加载中…") is None
-
-
-# ───────────────── _scan_fast_fail_page (Commit 2) ─────────────────
-
-def test_scan_fast_fail_hit_sets_reason_and_closes_box():
-    driver = FakeDriver(
-        {(By.CLASS_NAME, "reserve-box"): [FakeElement()]},
-        page_source="该座位当前不可用",
+def test_booker_grace_retries_on_0630_not_open_yet_then_succeeds():
+    fire_utc = datetime(2026, 11, 18, 22, 30, 0, tzinfo=timezone.utc)  # BJ 06:30:00
+    fire_bj = fire_utc.astimezone(BJ_TZ)
+    client = _FakeLibSeatClient(
+        now_utc=fire_utc,
+        book_results=[
+            BookResponse(status="retry_captcha", message="系统可预约时间为 06:30 ~ 22:30", not_open_yet=True),
+            BookResponse(status="success", reservation_id="4666692", receipt="7222-692-4"),
+        ],
     )
-    booker = make_booker(driver)
-    assert booker._scan_fast_fail_page("12", {"不可用": "该座位不可用，请选择其他座位"}) is True
-    assert "被系统拒绝" in booker.last_lock_failure_reason
-    assert booker.close_popup_calls == [True]  # 有 reserve-box → 关掉
+    booker = ApiSeatBooker(
+        client,
+        account="20240001",
+        captcha_service=_FakeCaptchaService(),
+        grace_backoff_seconds=0.0,
+    )
+    res = booker.attempt_seat(
+        SeatCandidate("8", "17293", "30", "free"),
+        start_time="09:00",
+        end_time="15:00",
+        date_str="2026-11-19",
+        stop_event=threading.Event(),
+        fire_at=fire_bj,
+    )
+    assert res.status == "success"
+    assert len(client.booked_seat_ids) == 2
 
 
-def test_scan_fast_fail_hit_without_reserve_box_keeps_popup_closed():
-    driver = FakeDriver(page_source="约满")
-    booker = make_booker(driver)
-    assert booker._scan_fast_fail_page("12", {}) is True
-    assert booker.close_popup_calls == []  # 无 reserve-box → 不调用 close_popup
+def test_booker_rolls_over_to_fallback_room_when_primary_seats_taken():
+    client = _FakeLibSeatClient(
+        seats_by_room={
+            "30": [SeatCandidate("8", "17293", "30", "free")],
+            "24": [SeatCandidate("194", "20194", "24", "free")],
+        },
+        book_results=[
+            BookResponse(status="seat_taken", message="该座位已被他人预约"),
+            BookResponse(status="success", reservation_id="9001", receipt="R-9001"),
+        ],
+    )
+    booker = ApiSeatBooker(client, account="20240001", captcha_service=_FakeCaptchaService())
+    outcome, res, room_name = booker.attack_rooms(
+        room_plan=[("崇山校区图书馆", "三楼智慧研修空间"), ("崇山校区图书馆", "四楼南自习室")],
+        prefer_seats=["8"],
+        start_time="09:00",
+        end_time="15:00",
+        schedule=None,
+        stop_event=threading.Event(),
+        coordinator=SeatClaimCoordinator(),
+        wait_until_fn=_instant_wait,
+    )
+    assert outcome == "success"
+    assert res is not None and res.seat_no == "194" and res.reservation_id == "9001"
+    assert room_name == "四楼南自习室"
+    assert client.booked_seat_ids == ["17293", "20194"]
 
 
-def test_scan_fast_fail_miss_returns_false():
-    driver = FakeDriver(page_source="座位空闲，可预约")
-    booker = make_booker(driver)
-    assert booker._scan_fast_fail_page("12", {}) is False
-    assert booker.last_lock_failure_reason == ""
+def test_booker_stops_immediately_on_blacklist_and_existing_reservation():
+    # 1) 已有有效预约直接停止，不发起下单
+    c_existing = _FakeLibSeatClient(
+        active_reservations=[ReservationRecord(reservation_id="123", status="RESERVE", location="四楼南194")],
+    )
+    b1 = ApiSeatBooker(c_existing, account="20240001", captcha_service=_FakeCaptchaService())
+    outcome1, _, _ = b1.attack_rooms(
+        room_plan=[("崇山校区图书馆", "三楼智慧研修空间")],
+        prefer_seats=["8"],
+        start_time="09:00",
+        end_time="15:00",
+        schedule=None,
+        stop_event=threading.Event(),
+        coordinator=SeatClaimCoordinator(),
+        wait_until_fn=_instant_wait,
+    )
+    assert outcome1 == "stopped"
+    assert c_existing.booked_seat_ids == []
+
+    # 2) 黑名单立即停止，不尝试第二个座位
+    c_bl = _FakeLibSeatClient(
+        book_results=[BookResponse(status="blacklist", message="对不起，您已被加入黑名单")],
+    )
+    b2 = ApiSeatBooker(c_bl, account="20240001", captcha_service=_FakeCaptchaService())
+    outcome2, res2, _ = b2.attack_rooms(
+        room_plan=[("崇山校区图书馆", "三楼智慧研修空间")],
+        prefer_seats=["8", "10"],
+        start_time="09:00",
+        end_time="15:00",
+        schedule=None,
+        stop_event=threading.Event(),
+        coordinator=SeatClaimCoordinator(),
+        wait_until_fn=_instant_wait,
+    )
+    assert outcome2 == "stopped" and res2 is not None and res2.status == "blacklist"
+    assert c_bl.booked_seat_ids == ["17293"]
 
 
-# ───────────────── _relock_if_popup_gone (Commit 3) ─────────────────
+# ───────────────── Orchestrator 会话编排测试 ─────────────────
 
-class FakeBooker:
-    def __init__(self, *, popup_present=True, select_ok=True, fire_ok=True,
-                 auto_refreshed=False):
-        self._popup = popup_present
-        self._select_ok = select_ok
-        self._fire_ok = fire_ok
-        self.last_captcha_auto_refreshed = auto_refreshed
-        self.select_calls = []
-        self.fire_calls = 0
-        self.refresh_calls = []
-
-    def is_captcha_popup_present(self):
-        return self._popup
-
-    def select_time_and_wait(self, seat, start, end):
-        self.select_calls.append((seat, start, end))
-        return self._select_ok
-
-    def fire_submit_trigger(self):
-        self.fire_calls += 1
-        return self._fire_ok
-
-    def _refresh_click_captcha(self, previous_key="", wait_timeout=1.0):
-        self.refresh_calls.append((previous_key, wait_timeout))
-
-
-def test_relock_popup_still_present_returns_present_without_relocking():
-    fb = FakeBooker(popup_present=True)
-    assert main._relock_if_popup_gone(fb, "acc", "5", "21:00", "22:00") == "present"
-    assert fb.select_calls == []  # 弹窗还在，不该重锁
-
-
-def test_relock_gone_relock_success_returns_continue():
-    fb = FakeBooker(popup_present=False, select_ok=True, fire_ok=True)
-    assert main._relock_if_popup_gone(fb, "acc", "5", "21:00", "22:00") == "continue"
-    assert fb.select_calls == [("5", "21:00", "22:00")]
-    assert fb.fire_calls == 1
-
-
-def test_relock_gone_select_fail_returns_break():
-    fb = FakeBooker(popup_present=False, select_ok=False)
-    assert main._relock_if_popup_gone(fb, "acc", "5", "21:00", "22:00") == "break"
-    assert fb.fire_calls == 0  # 选座失败就不该触发提交
-
-
-def test_relock_gone_fire_fail_returns_break():
-    fb = FakeBooker(popup_present=False, select_ok=True, fire_ok=False)
-    assert main._relock_if_popup_gone(fb, "acc", "5", "21:00", "22:00") == "break"
-
-
-# ───────────────── _refresh_or_note_autorefresh (Commit 3) ─────────────────
-
-def test_refresh_when_autorefreshed_resets_flag_without_manual_refresh():
-    fb = FakeBooker(auto_refreshed=True)
-    main._refresh_or_note_autorefresh(fb, "acc", {"captcha_key": "k1"})
-    assert fb.last_captcha_auto_refreshed is False
-    assert fb.refresh_calls == []  # 系统已刷新 → 不手动刷新
-
-
-def test_refresh_when_not_autorefreshed_calls_manual_refresh():
-    fb = FakeBooker(auto_refreshed=False)
-    main._refresh_or_note_autorefresh(fb, "acc", {"captcha_key": "k9"})
-    assert fb.refresh_calls == [("k9", 1.0)]
-
-
-# ───────────────── _terminal_outcome_from_result (既有纯映射) ─────────────────
-
-def test_terminal_outcome_stop():
-    assert main._terminal_outcome_from_result("acc", "5", {"status": "stop"}) == ("stopped", None)
-
-
-def test_terminal_outcome_blacklist():
-    assert main._terminal_outcome_from_result("acc", "5", {"status": "blacklist"}) == ("stopped", None)
-
-
-def test_terminal_outcome_success_carries_seat():
-    assert main._terminal_outcome_from_result("acc", "42", {"status": "success"}) == ("success", "42")
-
-
-def test_terminal_outcome_non_terminal_returns_none():
-    assert main._terminal_outcome_from_result("acc", "5", {"status": "failed"}) is None
-    assert main._terminal_outcome_from_result("acc", "5", {"status": "retry_captcha"}) is None
-    assert main._terminal_outcome_from_result("acc", "5", {}) is None
-
-
-# ───────────────── _setup_session_dir / _export_session_log (Commit 1) ─────────────────
-
-def test_setup_session_dir_no_prior_log(tmp_path, monkeypatch):
+def test_orchestrator_relogins_on_token_expired_and_notifies(tmp_path, monkeypatch):
     import config
+
     monkeypatch.setattr(config, "LOG_DIR", str(tmp_path), raising=False)
-    session_dir, log_start = main._setup_session_dir("accA")
-    assert session_dir is not None and os.path.isdir(session_dir)
-    assert "sessions" in session_dir and "accA" in session_dir
-    assert log_start == 0
+    monkeypatch.setattr(config, "TARGET_CAMPUS", "崇山校区图书馆", raising=False)
+    monkeypatch.setattr(config, "TARGET_ROOM", "三楼智慧研修空间", raising=False)
+    monkeypatch.setattr(config, "FALLBACK_ROOMS", [], raising=False)
+    monkeypatch.setattr(config, "PREFER_SEATS", ["8"], raising=False)
+
+    fake_client = _FakeLibSeatClient(
+        book_results=[
+            TokenExpiredError("token过期"),
+            BookResponse(status="success", reservation_id="4666692", receipt="7222-692-4"),
+        ]
+    )
+    with mock.patch("logic.orchestrator.notify_booking_success") as mock_notify:
+        status = run_api_session(
+            "20240001",
+            "pwd",
+            "09:00",
+            "15:00",
+            threading.Event(),
+            client_factory=lambda _rec: fake_client,
+            captcha_service=_FakeCaptchaService(),
+            wait_until_fn=_instant_wait,
+        )
+
+    assert status == "success"
+    assert fake_client.login_calls == 2
+    assert fake_client.closed is True
+    mock_notify.assert_called_once()
 
 
-def test_setup_session_dir_records_prior_log_size(tmp_path, monkeypatch):
+def test_orchestrator_maintenance_defer_until_fire(tmp_path, monkeypatch):
     import config
+
     monkeypatch.setattr(config, "LOG_DIR", str(tmp_path), raising=False)
-    logf = tmp_path / "lnu_seat_accB.log"
-    logf.write_text("previous content\n", encoding="utf-8")
-    _, log_start = main._setup_session_dir("accB")
-    assert log_start == logf.stat().st_size > 0
+    future_fire = datetime.now(BJ_TZ) + timedelta(minutes=10)
+    schedule = {
+        "run_date": future_fire.date(),
+        "prep_at": future_fire - timedelta(seconds=15),
+        "keepalive_at": future_fire - timedelta(seconds=5),
+        "fire_at": future_fire,
+    }
+    fake_client = _FakeLibSeatClient(
+        login_responses=[LoginResponse(ok=False, reason="maintenance", message="系统维护中")]
+    )
+    status = run_api_session(
+        "20240001",
+        "pwd",
+        "09:00",
+        "15:00",
+        threading.Event(),
+        schedule=schedule,
+        wait_for_fire=True,
+        client_factory=lambda _rec: fake_client,
+        captcha_service=_FakeCaptchaService(),
+        wait_until_fn=_instant_wait,
+    )
+    assert status == "maintenance_retry_at_fire"
 
 
-def test_export_session_log_writes_slice_from_offset(tmp_path, monkeypatch):
+# ───────────────── 会话日志切片与 v5 配置向后兼容测试 ─────────────────
+
+def test_setup_session_dir_and_export_slice(tmp_path, monkeypatch):
     import config
+
     monkeypatch.setattr(config, "LOG_DIR", str(tmp_path), raising=False)
     logf = tmp_path / "lnu_seat_accC.log"
-    # 写精确字节(避免 Windows text 模式把 \n 翻成 \r\n 错位偏移)
     logf.write_bytes(b"OLD\nNEW LINE\n")
-    session_dir = tmp_path / "sess"
-    session_dir.mkdir()
-    main._export_session_log(str(session_dir), len(b"OLD\n"), "accC")
-    assert (session_dir / "session.log").read_text(encoding="utf-8") == "NEW LINE\n"
+    session_dir, log_start = main._setup_session_dir("accC")
+    assert session_dir is not None and os.path.isdir(session_dir)
+    assert log_start == len(b"OLD\nNEW LINE\n")
+
+    main._export_session_log(session_dir, len(b"OLD\n"), "accC")
+    assert (tmp_path / "sessions").is_dir()
+    assert open(os.path.join(session_dir, "session.log"), encoding="utf-8").read() == "NEW LINE\n"
 
 
-def test_export_session_log_guard_skips_on_none_dir(tmp_path, monkeypatch):
-    import config
-    monkeypatch.setattr(config, "LOG_DIR", str(tmp_path), raising=False)
-    (tmp_path / "lnu_seat_accD.log").write_text("data\n", encoding="utf-8")
-    # session_dir 为 None（建目录失败场景）→ 应直接跳过，不抛异常
-    main._export_session_log(None, 0, "accD")
+def test_config_io_ignores_legacy_v5_browser_fields_and_roundtrips_v6(tmp_path):
+    legacy_cfg = tmp_path / "config.py"
+    legacy_cfg.write_text(
+        'USERS = {"20240001": {"password": "pwd", "time": {"start": "09:00", "end": "15:00"}}}\n'
+        'TARGET_CAMPUS = "崇山校区图书馆"\n'
+        'TARGET_ROOM = "四楼南自习室"\n'
+        'PREFER_SEATS = ["194"]\n'
+        'BROWSER = "edge"\n'
+        'DRIVER_PATH = "C:/old/msedgedriver.exe"\n'
+        'WEBDRIVER_CACHE = "C:/old/cache"\n'
+        'WAIT_FOR_0630 = True\n',
+        encoding="utf-8",
+    )
+    state = config_io.load_state(str(legacy_cfg))
+    assert state.room == "四楼南自习室"
+    assert state.seats == ["194"]
+    assert state.accounts[0].account == "20240001"
+
+    state.webhook_url = "https://api.day.app/demo/"
+    state.fallback_rooms = [("崇山校区图书馆", "四楼北自习室")]
+    out_cfg = tmp_path / "config_v6.py"
+    config_io.save_state_to_file(state, str(out_cfg))
+    text = out_cfg.read_text(encoding="utf-8")
+    assert "BROWSER" not in text and "DRIVER_PATH" not in text
+    assert "FALLBACK_ROOMS" in text and "WEBHOOK_URL" in text
+
+    reloaded = config_io.load_state(str(out_cfg))
+    assert reloaded.webhook_url == "https://api.day.app/demo/"
+    assert reloaded.fallback_rooms == [("崇山校区图书馆", "四楼北自习室")]

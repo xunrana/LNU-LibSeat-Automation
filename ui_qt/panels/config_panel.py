@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (
     QScrollArea, QVBoxLayout, QWidget,
 )
 
-from ..services.config_io import AccountState, GuiState, MAX_ACCOUNTS, ROOM_DATA, account_entries, default_browser
+from ..services.config_io import AccountState, GuiState, MAX_ACCOUNTS, ROOM_DATA, account_entries
 from ..theme import C, mono, sans
 from ..widgets.account_card import AccountCard
 from ..widgets.mode_toggle import ModeToggle
@@ -205,6 +205,15 @@ class ConfigPanel(QWidget):
         email_row.addWidget(self.email_input, stretch=1)
         card.add_layout(email_row)
 
+        # 手机端即时 Webhook 推送（可选：Bark / PushPlus / Server酱 / 企微 / 飞书）
+        wh_row = QHBoxLayout()
+        wh_row.setSpacing(10)
+        wh_lbl = _row_label("手机推送", width=78)
+        wh_row.addWidget(wh_lbl)
+        self.webhook_input = _styled_input("可选：Bark / PushPlus / Server酱 / 企微 Webhook")
+        wh_row.addWidget(self.webhook_input, stretch=1)
+        card.add_layout(wh_row)
+
         return card
 
     def _on_toggle_acc2(self, checked):
@@ -264,12 +273,11 @@ class ConfigPanel(QWidget):
 
         card.add_widget(self.sched_frame)
 
-        # 浏览器选择（macOS 默认 Chrome，Windows 默认 Edge；Safari 仅单账号）
-        br_row = QHBoxLayout()
-        br_row.addWidget(_row_label("浏 览 器"))
-        self.cb_browser = _styled_combo(["Chrome", "Edge", "Safari"])
-        br_row.addWidget(self.cb_browser, stretch=1)
-        card.add_layout(br_row)
+        # 纯 API 引擎提示（v6 已彻底移除浏览器/WebDriver 依赖）
+        engine_hint = QLabel("⚡ 纯 API 直连引擎 · 无需安装浏览器或 WebDriver")
+        engine_hint.setFont(sans(9, ls=1))
+        engine_hint.setStyleSheet(f"color: {C.TEXT_MUTED}; background: transparent; padding-top: 2px;")
+        card.add_widget(engine_hint)
 
         return card
 
@@ -314,7 +322,12 @@ class ConfigPanel(QWidget):
                 s.accounts.append(entry)
         s.sync_legacy_fields()
         s.email = self.email_input.text().strip()
-        s.browser = self.cb_browser.currentText().strip().lower()
+        s.webhook_url = self.webhook_input.text().strip()
+        s.fallback_rooms = list(getattr(self, "_fallback_rooms", []))
+        if hasattr(self, "_api_base_url"):
+            s.api_base_url = self._api_base_url
+        if hasattr(self, "_api_fire_offset_ms"):
+            s.api_fire_offset_ms = self._api_fire_offset_ms
         s.mode = self.mode_toggle.mode()
         try:
             s.sched_hour = int(self.sched_hour.text() or "6")
@@ -336,6 +349,9 @@ class ConfigPanel(QWidget):
             self.cb_room.setCurrentIndex(idx)
 
         self.seats.set_seats(state.seats)
+        self._fallback_rooms = list(state.fallback_rooms)
+        self._api_base_url = state.api_base_url
+        self._api_fire_offset_ms = state.api_fire_offset_ms
         entries = account_entries(state, include_empty=True)
         while len(entries) < MAX_ACCOUNTS:
             entries.append(AccountState())
@@ -349,10 +365,7 @@ class ConfigPanel(QWidget):
         self.chk_use_acc2.setChecked(has_extra_accounts)
         self._on_toggle_acc2(has_extra_accounts)
         self.email_input.setText(state.email)
-        _br = (state.browser or default_browser()).capitalize()
-        _bi = self.cb_browser.findText(_br)
-        if _bi >= 0:
-            self.cb_browser.setCurrentIndex(_bi)
+        self.webhook_input.setText(state.webhook_url)
         self.mode_toggle.set_mode(state.mode, silent=False)
         self.sched_hour.setText(f"{state.sched_hour:02d}")
         self.sched_min.setText(f"{state.sched_min:02d}")
@@ -361,7 +374,7 @@ class ConfigPanel(QWidget):
         for w in (
             self.cb_campus, self.cb_room, self.seats,
             *self.account_cards, self.chk_use_acc2,
-            self.email_input, self.cb_browser, self.mode_toggle,
+            self.email_input, self.webhook_input, self.mode_toggle,
             self.sched_hour, self.sched_min,
         ):
             w.setEnabled(enabled)

@@ -1,11 +1,9 @@
 name: Build Windows
 
 # 在 Windows 云端 runner 上用 PyInstaller 打包成 exe 整包 zip。
-# 与 build-macos.yml 对称：仅在打 tag(v*)或手动触发时跑——打包慢，无需每次 push。
+# 默认仅手动触发（本地打包后手动上传 Release，推 v* 标签不再自动跑云端构建）。
 on:
-  push:
-    tags: ['v*']          # 推送 v* 标签时自动构建并挂到 Release
-  workflow_dispatch:       # 也可在 Actions 页手动触发（产物在 Artifacts）
+  workflow_dispatch:       # 仅在 Actions 页手动触发（产物在 Artifacts）
 
 jobs:
   build-windows:

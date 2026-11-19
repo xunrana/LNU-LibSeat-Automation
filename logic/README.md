@@ -1,14 +1,12 @@
-# logic/ — 业务逻辑层
+# logic/ — 纯 API 业务编排层
 
-抢座核心流程：登录 → 进自习室 → 选座 + 验证码 + 提交 → 结果判定。
+抢座核心调度与业务逻辑，零 Selenium / 零 GUI 依赖，可同时驱动 CLI、PySide6 桌面端及后续 Web 控制面板。
 
 | 文件 | 职责 |
-|------|------|
-| `auth.py` | 自动登录（`Authenticator`）：填账号密码、识别登录验证码、维护期检测 |
-| `navigator.py` | 校区 / 自习室切换、进房（`enter_room`） |
-| `booker.py` | 选座、点选验证码求解与点击、提交、预约结果检测（核心，最大文件） |
-| `result_classifier.py` | 预约结果分类纯函数（`classify_booking_result` / `is_blacklist_feedback` / `is_stop_booking_feedback`），无副作用、可单测 |
+|---|---|
+| `orchestrator.py` | 多账号并发总控、定时日程计算与精确 `wait_until`、维护期延迟/重连、Token 过期自动重登与成功通知分发 |
+| `booker.py` | `ApiSeatBooker`：已有预约预检、动态查房与实时空座刷新、首选直击、多房兜底、验证码闭环与 06:30 瞬态宽限重试 |
+| `seat_strategy.py` | 座号归一化、`FALLBACK_ROOMS` 多自习室规划、实时空座候选排序、多账号 `SeatClaimCoordinator` 防撞座 |
+| `result_classifier.py` | 纯函数预约结果分类（`classify_booking_result` + v6 `classify_api_booking_result`），无副作用、可单测 |
 
-> 多线程调度与单浏览器会话策略在仓库根的 [`main.py`](../main.py)；
-> 系统反馈文本 → 程序行为的映射见 [`docs/FEEDBACK_MESSAGES.md`](../docs/FEEDBACK_MESSAGES.md)。
-> 改动本目录后建议做真机端到端冒烟（见 [CONTRIBUTING](../CONTRIBUTING.md)）。
+> CLI 入口见仓库根 [`main.py`](../main.py)；系统反馈映射见 [`docs/FEEDBACK_MESSAGES.md`](../docs/FEEDBACK_MESSAGES.md)。

@@ -20,7 +20,7 @@ jobs:
           python-version: '3.12'
           cache: pip
 
-      # import main 会经 logic.booker 链路拉起 OpenCV(cv2)，Linux 上需要 libGL。
+      # import core.captcha_service / yolo_onnx 会拉起 OpenCV(cv2)，Linux 上需要 libGL。
       - name: Install system libs for OpenCV
         run: sudo apt-get update && sudo apt-get install -y libgl1 libglib2.0-0
 

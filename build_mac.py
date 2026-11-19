@@ -31,18 +31,18 @@ import venv
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 APP_NAME = "LNU-LibSeat"
-APP_VERSION = "v5.0.0"  # 每次发布新版本请修改此处
+APP_VERSION = "v6.0.0"  # 每次发布新版本请修改此处
 ARCH = platform.machine() or "arm64"  # arm64 (Apple Silicon)
 DIST_NAME = f"{APP_NAME}-{APP_VERSION}-macOS-{ARCH}"
 DIST_DIR = os.path.join(ROOT, "dist", DIST_NAME)
 VENV_DIR = os.path.join(ROOT, ".build_venv_mac")
 BUNDLE_ID = "com.xunrana.lnulibseat"
 
-# 只把这些包（及其依赖）打进 .app
+# 只把这些包（及其依赖）打进 .app（v6 纯 API 模式，彻底移除 selenium/webdriver/mss）
 BUILD_DEPS = [
-    "pyinstaller", "PySide6", "selenium", "ddddocr",
+    "pyinstaller", "PySide6", "ddddocr",
     "opencv-python", "numpy", "onnxruntime", "Pillow",
-    "requests", "webdriver-manager", "mss",
+    "requests", "pycryptodome",
 ]
 
 
@@ -100,10 +100,10 @@ def _make_icns():
         shutil.rmtree(iconset, ignore_errors=True)
 
 
-# 干净的配置模板（绝不打包个人数据；macOS 默认浏览器 = chrome）
+# 干净的配置模板（绝不打包个人数据；v6 纯 API 模式无需配置浏览器）
 CLEAN_CONFIG = '''\
 # ===================================================================
-# LNU-LibSeat-Automation 配置文件 (由 GUI 自动保存)
+# LNU-LibSeat-Automation v6 配置文件 (由 GUI 自动保存，纯 API 模式)
 # ===================================================================
 
 USERS = {
@@ -115,16 +115,17 @@ USERS = {
 
 TARGET_CAMPUS = "崇山校区图书馆"
 TARGET_ROOM = "三楼智慧研修空间"
+FALLBACK_ROOMS = []
 PREFER_SEATS = []
 
 WAIT_FOR_0630 = False
 MAX_ACCOUNTS = 2
 
-BROWSER = "chrome"
-DRIVER_PATH = ""
-WEBDRIVER_CACHE = ""
+API_BASE_URL = "http://libseat.lnu.edu.cn"
+API_FIRE_OFFSET_MS = 200
 
 RECEIVER_EMAIL = ""
+WEBHOOK_URL = ""
 SMTP_USER = ""
 SMTP_PASS = ""
 
@@ -145,8 +146,8 @@ open "LNU-LibSeat.app"
 '''
 
 USAGE_TXT = '''\
-LNU-LibSeat 图书馆智能抢座系统 · macOS 使用说明
-================================================
+LNU-LibSeat 图书馆智能抢座系统 v6 · macOS 使用说明
+==================================================
 
 【首次运行】
 1. 把本文件夹整个解压到任意位置（例如「下载」或「桌面」）。
@@ -155,18 +156,14 @@ LNU-LibSeat 图书馆智能抢座系统 · macOS 使用说明
      之后即可直接双击 LNU-LibSeat.app 启动。）
 3. 如果第 2 步提示「无法打开」，请到 系统设置 ▸ 隐私与安全性 ▸ 底部「仍要打开」。
 
-【浏览器要求】
-- 默认使用 Chrome，请先安装 Google Chrome（推荐，支持双账号并行）。
-- 如果想用 Safari：在应用内「浏览器」选择 Safari，并先开启：
-  Safari ▸ 设置 ▸ 高级 ▸ 勾选「在菜单栏显示开发菜单」→ 开发 ▸ 允许远程自动化。
-  （注意：Safari 只支持单账号，不支持双账号并行。）
+【v6 纯 API 引擎】
+- 无需安装 Chrome / Edge 或配置 Safari 远程自动化，双账号原生并行！
 
 【数据位置】
-- config.py（你的配置）、logs/（运行日志）都在本文件夹内，与 .app 同级，可直接查看/编辑。
+- config.py（你的配置）、logs/（运行日志与脱敏追溯）都在本文件夹内，与 .app 同级，可直接查看/编辑。
 
 【注意】
 - 抢座等待期间请保持电脑开机；应用会自动防止系统休眠。
-- 屏幕录制功能在 macOS 上可能不可用（不影响抢座）。
 '''
 
 
@@ -200,13 +197,21 @@ def build():
         "--add-data", f"{os.path.join(ROOT, 'logo.png')}{sep}.",
         "--add-data", f"{os.path.join(ROOT, 'logo1.png')}{sep}.",
         "--add-data", f"{os.path.join(ROOT, 'logo.ico')}{sep}.",
-        # 验证码 ONNX 模型 -> _MEIPASS/core/checkpoints（由 core.paths.resource_root 定位）
-        "--add-data", f"{os.path.join(ROOT, 'core', 'checkpoints')}{sep}core/checkpoints",
+        # 仅打包 core/checkpoints/*.onnx（排除本地 *.pt/*.pth 训练权重）
+        *[
+            arg
+            for fn in sorted(os.listdir(os.path.join(ROOT, "core", "checkpoints")))
+            if fn.endswith(".onnx")
+            for arg in (
+                "--add-data",
+                f"{os.path.join(ROOT, 'core', 'checkpoints', fn)}{sep}core/checkpoints",
+            )
+        ],
 
         # 带原生库 / 数据文件的包
         "--collect-all", "ddddocr",
         "--collect-all", "onnxruntime",
-        "--collect-all", "selenium",
+        "--collect-all", "Crypto",
         "--collect-all", "PySide6",
         "--collect-all", "cv2",
         "--collect-all", "numpy",

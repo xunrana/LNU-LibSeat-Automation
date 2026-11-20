@@ -1,4 +1,6 @@
 """core.libseat_client 纯 HTTP 客户端离线单元测试（全 Mock 传输层）。"""
+from __future__ import annotations
+
 import base64
 from datetime import datetime, timezone
 from email.utils import format_datetime

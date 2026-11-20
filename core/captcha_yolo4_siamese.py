@@ -5,7 +5,6 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any, Literal, overload
 
-import cv2
 import numpy as np
 import onnxruntime as ort
 from PIL import Image
@@ -70,12 +69,14 @@ def _crop_with_padding(
 
 
 def _preprocess_siamese(image_bgr: np.ndarray, input_size: tuple[int, int] = (112, 112)) -> np.ndarray:
-    rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
+    rgb = np.ascontiguousarray(image_bgr[:, :, ::-1])
     h, w = input_size
     ih, iw = rgb.shape[:2]
     scale = min(w / iw, h / ih)
-    nw, nh = int(iw * scale), int(ih * scale)
-    resized = cv2.resize(rgb, (nw, nh), interpolation=cv2.INTER_CUBIC)
+    nw, nh = max(1, int(iw * scale)), max(1, int(ih * scale))
+    resized = np.asarray(
+        Image.fromarray(rgb).resize((nw, nh), Image.Resampling.BICUBIC)
+    )
     canvas = np.full((h, w, 3), 128, dtype=np.uint8)
     dx, dy = (w - nw) // 2, (h - nh) // 2
     canvas[dy : dy + nh, dx : dx + nw] = resized
@@ -240,7 +241,7 @@ class Yolo4SiameseSolver:
     @staticmethod
     def _image_bytes_to_bgr(image_bytes: bytes) -> np.ndarray:
         image = Image.open(BytesIO(image_bytes)).convert("RGB")
-        return cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+        return np.asarray(image, dtype=np.uint8)[:, :, ::-1].copy()
 
     @overload
     def solve(

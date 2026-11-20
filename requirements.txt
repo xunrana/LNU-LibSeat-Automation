@@ -2,10 +2,9 @@
 requests>=2.31.0
 pycryptodome>=3.20.0
 
-# Captcha recognition (login graphic captcha + local YOLOv8/Siamese ONNX click captcha)
+# Captcha recognition (login graphic captcha + local YOLOv8/Siamese ONNX click captcha; pure Pillow + ONNX)
 Pillow>=10.1.0
 ddddocr
-opencv-python>=4.8.0
 numpy>=1.24.0
 onnxruntime>=1.17.0
 

@@ -4,9 +4,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-import cv2
 import numpy as np
 import onnxruntime as ort
+from PIL import Image
 
 
 @dataclass(frozen=True)
@@ -78,8 +78,10 @@ class YoloOnnxPredictor:
         h, w = image_bgr.shape[:2]
         s = self.imgsz
         scale = min(s / w, s / h)
-        nw, nh = int(w * scale), int(h * scale)
-        resized = cv2.resize(image_bgr, (nw, nh), interpolation=cv2.INTER_LINEAR)
+        nw, nh = max(1, int(w * scale)), max(1, int(h * scale))
+        resized = np.asarray(
+            Image.fromarray(image_bgr).resize((nw, nh), Image.Resampling.BILINEAR)
+        )
         canvas = np.full((s, s, 3), 114, dtype=np.uint8)
         pad_t = (s - nh) // 2
         pad_l = (s - nw) // 2

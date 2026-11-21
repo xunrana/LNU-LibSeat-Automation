@@ -15,6 +15,7 @@ import 'package:lnu_libseat_mobile/core/protocol.dart';
 import 'package:lnu_libseat_mobile/core/session_recorder.dart';
 import 'package:lnu_libseat_mobile/logic/result_classifier.dart';
 import 'package:lnu_libseat_mobile/logic/seat_strategy.dart';
+import 'package:lnu_libseat_mobile/services/background_scheduler.dart';
 import 'package:lnu_libseat_mobile/services/config_store.dart';
 import 'package:lnu_libseat_mobile/services/notification_service.dart';
 import 'package:lnu_libseat_mobile/services/rush_controller.dart';
@@ -563,5 +564,49 @@ void main() {
       nowBeijing: now1300,
     );
     expect(checkedIn, isEmpty);
+  });
+
+  test('隔夜守夜被杀复活接力决策（未到点续守 / 刚过点立刻开抢 / 过期自动丢弃）', () {
+    final fireAtMs = DateTime.utc(2026, 11, 21, 22, 30, 0).millisecondsSinceEpoch;
+    // 1. 提前 35 秒由闹钟冷启动拉起 -> 恢复定时守夜（不会误跳到明天）
+    expect(
+      decidePendingRushAction(
+        armed: true,
+        coldAlarmFired: true,
+        fireAtEpochMs: fireAtMs,
+        nowEpochMs: fireAtMs - 35 * 1000,
+      ),
+      equals(PendingRushAction.resumeScheduled),
+    );
+    // 2. 闹钟延迟 5 秒才拉起（已过 06:30:00）-> 立即开抢，绝不顺延到明天！
+    expect(
+      decidePendingRushAction(
+        armed: true,
+        coldAlarmFired: true,
+        fireAtEpochMs: fireAtMs,
+        nowEpochMs: fireAtMs + 5 * 1000,
+      ),
+      equals(PendingRushAction.fireImmediately),
+    );
+    // 3. 超过宽限窗口（如上午 10 点才开机）-> 视为过期丢弃，不乱抢
+    expect(
+      decidePendingRushAction(
+        armed: true,
+        coldAlarmFired: true,
+        fireAtEpochMs: fireAtMs,
+        nowEpochMs: fireAtMs + 20 * 60 * 1000,
+      ),
+      equals(PendingRushAction.none),
+    );
+    // 4. 用户主动中止后（armed=false, coldAlarmFired=false）-> 不自动重启
+    expect(
+      decidePendingRushAction(
+        armed: false,
+        coldAlarmFired: false,
+        fireAtEpochMs: fireAtMs,
+        nowEpochMs: fireAtMs - 60 * 1000,
+      ),
+      equals(PendingRushAction.none),
+    );
   });
 }

@@ -127,9 +127,30 @@ class MobileRushController extends ChangeNotifier {
         if (!isRunning) {
           appendLog('system', '收到系统自动化唤醒指令 ($cmd)，正在启动约座...');
           startRush();
+        } else if (cmd.startsWith('exact_alarm')) {
+          appendLog('system', '⏰ 系统闹钟已准点唤醒 CPU，隔夜守夜正常推进中');
         }
       },
     );
+  }
+
+  /// App 冷启动后检测是否由 Android 隔夜闹钟拉起，或上次隔夜守夜进程曾被系统回收需要自动接力。
+  Future<void> checkAndResumePendingAlarmRush() async {
+    if (isRunning) {
+      return;
+    }
+    final action =
+        await BackgroundSchedulerService.instance.consumePendingWakeupRush();
+    if (action == PendingRushAction.none || isRunning) {
+      return;
+    }
+    if (action == PendingRushAction.fireImmediately) {
+      appendLog('system', '⏰ 隔夜闹钟冷启动唤醒已达放座时刻，立即切入极速约座！');
+      await startRush(overrideScheduled: false);
+    } else if (action == PendingRushAction.resumeScheduled) {
+      appendLog('system', '⏰ 检测到待执行的隔夜守夜任务，自动接力恢复准点守夜...');
+      await startRush(overrideScheduled: true);
+    }
   }
 
   List<LogEntry> logsForFilter(int tabIndex) {
@@ -227,12 +248,34 @@ class MobileRushController extends ChangeNotifier {
         sessionCfg.scheduleHour,
         sessionCfg.scheduleMinute,
       );
-      await BackgroundSchedulerService.instance
+      final startedGuard = await BackgroundSchedulerService.instance
           .startAndroidForegroundRushService(
         prepAtBeijing: sched.prepAt,
+        fireAtBeijing: sched.fireAt,
         targetSummary:
             '${sessionCfg.targetRoom} · ${formatHms(sched.fireAt)} 准点晨约',
       );
+      if (startedGuard) {
+        final wakeAt = sched.prepAt.subtract(const Duration(seconds: 20));
+        appendLog(
+          'system',
+          '🛡️ 隔夜防杀守夜已启用：AlarmClock 闹钟(${formatHms(wakeAt)}) + 动态唤醒锁 + WiFi保活锁',
+        );
+        final status = await BackgroundSchedulerService.instance
+            .getAndroidKeepAliveStatus();
+        if (!status.ignoringBatteryOptimizations) {
+          appendLog(
+            'system',
+            '💡 建议前往「我的 → 晨约守夜与后台保活」开启电池优化白名单，防国产手机夜间强杀',
+          );
+        }
+        if (!status.canScheduleExactAlarms) {
+          appendLog(
+            'system',
+            '⚠️ 尚未授予精确闹钟权限，建议前往「我的 → 晨约守夜与后台保活」一键授权',
+          );
+        }
+      }
     }
 
     final orchestrator = MobileOrchestrator(

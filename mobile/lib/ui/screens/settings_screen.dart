@@ -1031,49 +1031,204 @@ class _NotificationPageState extends State<_NotificationPage> {
 }
 
 // ── 二级页 6：晨约守夜与后台保活向导 ──
-class _KeepAliveGuidePage extends StatelessWidget {
+class _KeepAliveGuidePage extends StatefulWidget {
   final MobileRushController controller;
   const _KeepAliveGuidePage({required this.controller});
+
+  @override
+  State<_KeepAliveGuidePage> createState() => _KeepAliveGuidePageState();
+}
+
+class _KeepAliveGuidePageState extends State<_KeepAliveGuidePage>
+    with WidgetsBindingObserver {
+  AndroidKeepAliveStatus _status = const AndroidKeepAliveStatus();
+  bool _loadingStatus = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _refreshStatus();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _refreshStatus();
+    }
+  }
+
+  Future<void> _refreshStatus() async {
+    if (!Platform.isAndroid) {
+      return;
+    }
+    setState(() => _loadingStatus = true);
+    final st =
+        await BackgroundSchedulerService.instance.getAndroidKeepAliveStatus();
+    if (mounted) {
+      setState(() {
+        _status = st;
+        _loadingStatus = false;
+      });
+    }
+  }
+
+  Widget _statusChip(bool ok, String okText, String warnText) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: (ok ? LnuColors.ok : LnuColors.warn).withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(
+        ok ? okText : warnText,
+        style: TextStyle(
+          color: ok ? LnuColors.ok : LnuColors.amberDeep,
+          fontSize: 11.5,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('晨约守夜与后台保活', style: LnuTheme.serif(17, weight: FontWeight.w700)),
+        title: Text(
+          '晨约守夜与后台保活',
+          style: LnuTheme.serif(17, weight: FontWeight.w700),
+        ),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: <Widget>[
-          if (Platform.isAndroid)
+          if (Platform.isAndroid) ...<Widget>[
             Card(
-              child: ListTile(
-                leading: const Icon(
-                  Icons.battery_saver_rounded,
-                  color: LnuColors.amberHot,
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Row(
+                      children: <Widget>[
+                        Icon(
+                          _status.allReady
+                              ? Icons.verified_user_outlined
+                              : Icons.shield_outlined,
+                          size: 18,
+                          color: _status.allReady
+                              ? LnuColors.ok
+                              : LnuColors.amberHot,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          _status.allReady
+                              ? '隔夜防杀保活权限已全部就绪'
+                              : '隔夜抢座保活体检（建议全部开启）',
+                          style: LnuTheme.serif(14.5, weight: FontWeight.w700),
+                        ),
+                        const Spacer(),
+                        if (_loadingStatus)
+                          const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 1.8),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      '内置 4 重隔夜防杀：系统 AlarmClock 闹钟级唤醒 + 动态 24h WakeLock + WifiLock 防息屏断网 + 夜间进程被杀自动拉起续抢 & 重启自恢复。',
+                      style: TextStyle(
+                        color: LnuColors.textMuted,
+                        fontSize: 12,
+                        height: 1.5,
+                      ),
+                    ),
+                  ],
                 ),
-                title: const Text('Android 加入电池优化白名单'),
-                subtitle: const Text('允许 06:29:40 精确闹钟唤醒 CPU（小米/华为/vivo/OPPO 必开）'),
-                trailing: const Icon(Icons.chevron_right_rounded),
-                onTap: () => BackgroundSchedulerService.instance
-                    .requestIgnoreBatteryOptimizations(),
               ),
             ),
+            Card(
+              child: Column(
+                children: <Widget>[
+                  ListTile(
+                    leading: const Icon(
+                      Icons.battery_saver_rounded,
+                      color: LnuColors.amberHot,
+                    ),
+                    title: const Text('电池优化白名单（无限制）'),
+                    subtitle: const Text('小米/华为/vivo/OPPO 隔夜不杀后台必开'),
+                    trailing: _statusChip(
+                      _status.ignoringBatteryOptimizations,
+                      '已开启',
+                      '去开启',
+                    ),
+                    onTap: () => BackgroundSchedulerService.instance
+                        .requestIgnoreBatteryOptimizations(),
+                  ),
+                  const Divider(height: 1, indent: 52),
+                  ListTile(
+                    leading: const Icon(
+                      Icons.alarm_on_rounded,
+                      color: LnuColors.ink,
+                    ),
+                    title: const Text('精确闹钟权限（AlarmClock）'),
+                    subtitle: const Text('允许 06:29:25 穿透深度休眠唤醒与复活进程'),
+                    trailing: _statusChip(
+                      _status.canScheduleExactAlarms,
+                      '已授权',
+                      '去授权',
+                    ),
+                    onTap: () => BackgroundSchedulerService.instance
+                        .requestExactAlarmPermission(),
+                  ),
+                  const Divider(height: 1, indent: 52),
+                  ListTile(
+                    leading: const Icon(
+                      Icons.notifications_active_outlined,
+                      color: LnuColors.inkLight,
+                    ),
+                    title: const Text('系统通知权限'),
+                    subtitle: const Text('用于守夜常驻通知、准点唤醒与签到防违约提醒'),
+                    trailing: _statusChip(
+                      _status.notificationsEnabled,
+                      '已开启',
+                      '去开启',
+                    ),
+                    onTap: () => BackgroundSchedulerService.instance
+                        .openAppNotificationSettings(),
+                  ),
+                ],
+              ),
+            ),
+          ],
           Card(
             child: ListTile(
-              leading: const Icon(Icons.nights_stay_outlined, color: LnuColors.ink),
+              leading:
+                  const Icon(Icons.nights_stay_outlined, color: LnuColors.ink),
               title: const Text('立即进入「银杏夜守」OLED 书桌时钟'),
-              subtitle: const Text('纯黑微光防烧屏常亮，iPhone 睡前插电 06:30 准点触发'),
+              subtitle: const Text('纯黑微光防烧屏常亮，睡前插电 06:30 稳如磐石'),
               trailing: const Icon(Icons.chevron_right_rounded),
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute<void>(
-                  builder: (_) => NightstandScreen(controller: controller),
+                  builder: (_) =>
+                      NightstandScreen(controller: widget.controller),
                 ),
               ),
             ),
           ),
           Card(
             child: ListTile(
-              leading: const Icon(Icons.link_rounded, color: LnuColors.inkLight),
+              leading:
+                  const Icon(Icons.link_rounded, color: LnuColors.inkLight),
               title: const Text('复制 iOS 快捷指令自动唤醒链接'),
               subtitle: const Text('lnulibseat://rush?mode=auto · 搭配 06:29 个人自动化'),
               trailing: const Icon(Icons.copy_rounded, size: 18),
@@ -1082,7 +1237,9 @@ class _KeepAliveGuidePage extends StatelessWidget {
                   const ClipboardData(text: 'lnulibseat://rush?mode=auto'),
                 );
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('已复制 lnulibseat://rush?mode=auto')),
+                  const SnackBar(
+                    content: Text('已复制 lnulibseat://rush?mode=auto'),
+                  ),
                 );
               },
             ),

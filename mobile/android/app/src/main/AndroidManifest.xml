@@ -3,13 +3,17 @@
     <!-- 网络与校园网 HTTP 明文访问权限 -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
 
-    <!-- 06:30 定时抢座后台保活、Doze 穿透精确闹钟与电池优化白名单权限 -->
+    <!-- 06:30 定时抢座隔夜后台保活、闹钟级唤醒、开机恢复与电池优化白名单权限 -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
@@ -58,11 +62,24 @@
                 android:value="scheduled_library_seat_reservation_at_0630" />
         </service>
 
-        <!-- 06:29:40 Doze 穿透精确闹钟广播接收器 -->
+        <!-- 06:29:25 闹钟级唤醒广播接收器（穿透深度休眠，进程被杀自动复活拉起） -->
         <receiver
             android:name=".RushAlarmReceiver"
             android:enabled="true"
             android:exported="false" />
+
+        <!-- 手机夜间重启或系统更新时间后自动重新挂载未过期的定时守夜闹钟 -->
+        <receiver
+            android:name=".RushBootReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+        </receiver>
 
         <!-- 预约签到前防违约精确提醒广播接收器（杀后台/息屏准时弹窗提醒） -->
         <receiver

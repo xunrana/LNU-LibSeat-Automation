@@ -36,6 +36,7 @@ Future<void> main() async {
 
   final rushController = MobileRushController(config: configStore);
   unawaited(rushController.warmupModels());
+  unawaited(rushController.checkAndResumePendingAlarmRush());
 
   runApp(LnuLibSeatMobileApp(controller: rushController));
 }

@@ -18,11 +18,16 @@ import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
+import android.media.MediaMetadata
+import android.media.session.MediaSession
+import android.media.session.PlaybackState
 import android.net.Uri
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
 import android.view.WindowManager
@@ -30,51 +35,67 @@ import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.nio.ByteBuffer
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.TimeUnit
 
 /**
- * Android 静音防墓碑冻结保活器（对标 iOS AppDelegate.swift 的 AVAudioPlayer 全零静音流）。
+ * Android 实时流微幅不可闻防墓碑保活器（对标 QQ 音乐 / 网易云 / iOS 静音后台保活）。
  *
- * 原理：vivo OriginOS 4 (PEM) / 小米 HyperOS (Millet) / OPPO ColorOS (Hans) / 华为 HarmonyOS
- * 即便开启电池优化白名单，仍会在锁屏 10 秒后冻结普通 specialUse 前台服务的 Linux cgroup；
- * 但所有国产 ROM 的冻结器都会检查 AudioFlinger 活跃音频轨，绝不冻结正在播放音频的 UID。
- * 本类在定时守夜期间循环播放纯内存全零 PCM（绝对无声、不申请 AudioFocus、不打断任何音乐/视频、
- * 不弹出锁屏媒体卡片），抢座结束或中止后立即 stop + release。
+ * 为什么必须用 MODE_STREAM + 24kHz 超声微幅非零 PCM（不能用 MODE_STATIC 全零）：
+ * - vivo OriginOS 4 (PEM) / 小米 HyperOS (Millet) / OPPO ColorOS (Hans) 对 MODE_STATIC 全零 0x0000
+ *   有「静音假播放」检测，切去刷抖音或息屏 10 秒仍会冻结 cgroup；
+ * - 本类改用 MODE_STREAM 每 500ms 向 AudioFlinger 阻塞写入 16-bit 交替 +4/-4 PCM（Nyquist 24kHz 超声频段、
+ *   叠加 0.25f 增益后实际幅度 ±1 LSB ≈ -90 dB，物理上完全人耳不可闻，但 RMS > 0 持续活跃流）；
+ * - 不申请 AudioFocus，绝不打断抖音/音乐/视频/通话声音；抢座结束或中止后立刻 stop + release。
  */
 object SilentAudioKeepAlive {
     private val lock = Any()
     private var audioTrack: AudioTrack? = null
+    private var writerThread: Thread? = null
+    @Volatile private var running: Boolean = false
     @Volatile var activeSampleRate: Int = 0
         private set
 
     fun isActive(): Boolean = synchronized(lock) {
         val t = audioTrack
-        t != null && t.state == AudioTrack.STATE_INITIALIZED && t.playState == AudioTrack.PLAYSTATE_PLAYING
+        running && t != null && t.state == AudioTrack.STATE_INITIALIZED && t.playState == AudioTrack.PLAYSTATE_PLAYING
     }
 
     fun start(): Pair<Boolean, String> = synchronized(lock) {
         val existing = audioTrack
-        if (existing != null &&
+        if (running &&
+            existing != null &&
             existing.state == AudioTrack.STATE_INITIALIZED &&
             existing.playState == AudioTrack.PLAYSTATE_PLAYING
         ) {
-            return Pair(true, "${activeSampleRate}Hz")
+            return Pair(true, "stream@${activeSampleRate}Hz")
         }
         stopLocked()
 
         val nativeRate = try {
             AudioTrack.getNativeOutputSampleRate(AudioManager.STREAM_MUSIC)
-                .takeIf { it in 8000..48000 } ?: 48000
+                .takeIf { it in 16000..48000 } ?: 48000
         } catch (_: Exception) {
             48000
         }
-        val candidateRates = linkedSetOf(nativeRate, 44100, 48000, 16000)
+        val candidateRates = linkedSetOf(nativeRate, 48000, 44100, 16000)
         var lastErr = "init_failed"
 
         for (rate in candidateRates) {
             try {
-                // 1 秒 16-bit Mono 全零 PCM（纯内存静态循环，零后台线程开销，0.0000 dB 绝对无声）
-                val frameCount = rate
-                val silenceBytes = ByteArray(frameCount * 2)
+                val minBuf = AudioTrack.getMinBufferSize(
+                    rate,
+                    AudioFormat.CHANNEL_OUT_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT
+                )
+                if (minBuf <= 0) {
+                    lastErr = "minBuf_$minBuf"
+                    continue
+                }
+                // 0.5 秒 chunk（例如 48000Hz → 24000 样本 = 48 KB）
+                val chunkSamples = (rate / 2).coerceAtLeast(minBuf / 2)
+                val bufBytes = (chunkSamples * 2).coerceAtLeast(minBuf * 2)
                 val attrs = AudioAttributes.Builder()
                     .setUsage(AudioAttributes.USAGE_MEDIA)
                     .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
@@ -87,32 +108,52 @@ object SilentAudioKeepAlive {
                 val track = AudioTrack.Builder()
                     .setAudioAttributes(attrs)
                     .setAudioFormat(fmt)
-                    .setBufferSizeInBytes(silenceBytes.size)
-                    .setTransferMode(AudioTrack.MODE_STATIC)
+                    .setBufferSizeInBytes(bufBytes)
+                    .setTransferMode(AudioTrack.MODE_STREAM)
                     .build()
                 if (track.state != AudioTrack.STATE_INITIALIZED) {
                     track.release()
                     lastErr = "uninitialized_$rate"
                     continue
                 }
-                val written = track.write(silenceBytes, 0, silenceBytes.size)
-                if (written <= 0) {
-                    track.release()
-                    lastErr = "write_$written"
-                    continue
+                // Nyquist 频率 (rate/2 ≈ 24kHz 超声) + 极微幅度 ±4 × 0.25 = ±1 LSB (-90 dB，物理绝对不可闻且 RMS > 0)
+                val pcmChunk = ShortArray(chunkSamples) { idx ->
+                    if ((idx and 1) == 0) 4.toShort() else (-4).toShort()
                 }
-                val loopRes = track.setLoopPoints(0, frameCount, -1)
-                if (loopRes != AudioTrack.SUCCESS) {
-                    track.release()
-                    lastErr = "loop_$loopRes"
-                    continue
-                }
-                // PCM 采样全为 0（绝对无声）；设非零微小增益避免 OEM 将 0.0 音量轨视作静音可挂起
-                track.setVolume(0.01f)
+                track.setVolume(0.25f)
                 track.play()
+
+                running = true
                 audioTrack = track
                 activeSampleRate = rate
-                return Pair(true, "${rate}Hz")
+
+                val t = Thread({
+                    try {
+                        while (running) {
+                            val current = audioTrack ?: break
+                            if (current.playState != AudioTrack.PLAYSTATE_PLAYING) {
+                                break
+                            }
+                            val written = current.write(
+                                pcmChunk,
+                                0,
+                                pcmChunk.size,
+                                AudioTrack.WRITE_BLOCKING
+                            )
+                            if (written < 0) {
+                                break
+                            }
+                        }
+                    } catch (_: Throwable) {
+                        // 正常停止或中断退出
+                    }
+                }, "LNU-SilentAudioStream").apply {
+                    isDaemon = true
+                    priority = Thread.MIN_PRIORITY
+                    start()
+                }
+                writerThread = t
+                return Pair(true, "stream@${rate}Hz")
             } catch (exc: Exception) {
                 lastErr = exc.message ?: exc.javaClass.simpleName
             }
@@ -125,8 +166,11 @@ object SilentAudioKeepAlive {
     }
 
     private fun stopLocked() {
+        running = false
         val t = audioTrack
+        val th = writerThread
         audioTrack = null
+        writerThread = null
         activeSampleRate = 0
         if (t != null) {
             try {
@@ -144,6 +188,9 @@ object SilentAudioKeepAlive {
                 t.release()
             } catch (_: Exception) {}
         }
+        try {
+            th?.interrupt()
+        } catch (_: Exception) {}
     }
 }
 
@@ -856,17 +903,15 @@ class MainActivity : FlutterActivity() {
 class RushForegroundService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
+    private var mediaSession: MediaSession? = null
+    private var heartbeatExec: ScheduledExecutorService? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var currentSummary: String = "06:30 准点抢座守夜中"
+    private var currentFireAtMs: Long = 0L
+    private var sessionStartedAtMs: Long = 0L
+    private var lastNotifUpdateSec: Long = -1L
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val persisted = RushAlarmStore.readState(this)
-        val summary = intent?.getStringExtra(RushAlarmStore.EXTRA_SUMMARY)
-            ?.takeIf { it.isNotBlank() }
-            ?: (persisted["summary"] as? String)?.takeIf { it.isNotBlank() }
-            ?: "06:30 准点抢座守夜中"
-        val fireAtEpochMs = intent?.getLongExtra(RushAlarmStore.EXTRA_FIRE_AT_MS, 0L)
-            ?.takeIf { it > 0L }
-            ?: (persisted["fireAtEpochMs"] as? Long ?: 0L)
-
+    private fun buildGuardNotification(contentText: String): Notification {
         val channelId = "lnu_libseat_foreground_guard_v2"
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
@@ -898,13 +943,137 @@ class RushForegroundService : Service() {
             @Suppress("DEPRECATION")
             Notification.Builder(this)
         }
-        val notification = builder
-            .setContentTitle("🎯 LNU-LibSeat 隔夜守夜已激活")
-            .setContentText(summary)
+        builder
+            .setContentTitle("LNU LibSeat 准点守夜中")
+            .setContentText(contentText)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
             .setContentIntent(contentPending)
+            .setOnlyAlertOnce(true)
             .setOngoing(true)
-            .build()
+
+        val token = mediaSession?.sessionToken
+        if (token != null) {
+            try {
+                builder.setStyle(Notification.MediaStyle().setMediaSession(token))
+            } catch (_: Exception) {}
+        }
+        return builder.build()
+    }
+
+    private fun ensureMediaSession(summary: String, fireAtEpochMs: Long) {
+        try {
+            if (mediaSession == null) {
+                mediaSession = MediaSession(this, "LNU-LibSeat-Guard")
+            }
+            val ms = mediaSession ?: return
+            val nowMs = System.currentTimeMillis()
+            if (sessionStartedAtMs <= 0L) {
+                sessionStartedAtMs = nowMs
+            }
+            val totalDurationMs = if (fireAtEpochMs > sessionStartedAtMs) {
+                (fireAtEpochMs - sessionStartedAtMs).coerceAtLeast(1_000L)
+            } else {
+                60_000L
+            }
+            val elapsedMs = (nowMs - sessionStartedAtMs).coerceIn(0L, totalDurationMs)
+            ms.setMetadata(
+                MediaMetadata.Builder()
+                    .putString(MediaMetadata.METADATA_KEY_TITLE, "LNU LibSeat 准点守夜中")
+                    .putString(MediaMetadata.METADATA_KEY_ARTIST, summary)
+                    .putLong(MediaMetadata.METADATA_KEY_DURATION, totalDurationMs)
+                    .build()
+            )
+            ms.setPlaybackState(
+                PlaybackState.Builder()
+                    .setActions(
+                        PlaybackState.ACTION_PLAY or
+                            PlaybackState.ACTION_PAUSE or
+                            PlaybackState.ACTION_STOP
+                    )
+                    .setState(PlaybackState.STATE_PLAYING, elapsedMs, 1.0f)
+                    .build()
+            )
+            ms.isActive = true
+        } catch (_: Exception) {}
+    }
+
+    private fun startNativeHeartbeat() {
+        stopNativeHeartbeat()
+        val exec = Executors.newSingleThreadScheduledExecutor { r ->
+            Thread(r, "LNU-GuardHeartbeat").apply { isDaemon = true }
+        }
+        heartbeatExec = exec
+        exec.scheduleWithFixedDelay({
+            try {
+                val nowMs = System.currentTimeMillis()
+                val remMs = if (currentFireAtMs > 0L) currentFireAtMs - nowMs else 0L
+                val secBucket = nowMs / 1000L
+
+                // 每 1 秒刷新 MediaSession 播放进度与通知栏实时倒计时（切去刷抖音下拉通知栏一眼可见活蹦乱跳）
+                if (secBucket != lastNotifUpdateSec) {
+                    lastNotifUpdateSec = secBucket
+                    ensureMediaSession(currentSummary, currentFireAtMs)
+                    val countdownText = if (currentFireAtMs > 0L) {
+                        if (remMs > 0L) {
+                            val totalSec = (remMs + 999L) / 1000L
+                            val h = totalSec / 3600L
+                            val m = (totalSec % 3600L) / 60L
+                            val s = totalSec % 60L
+                            val hms = String.format(java.util.Locale.US, "%02d:%02d:%02d", h, m, s)
+                            "倒计时 $hms · $currentSummary"
+                        } else {
+                            "已到开抢时刻，正在执行约座 · $currentSummary"
+                        }
+                    } else {
+                        currentSummary
+                    }
+                    try {
+                        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                        nm.notify(6300, buildGuardNotification(countdownText))
+                    } catch (_: Exception) {}
+                }
+
+                // 主动在主线程向 Dart 推送原生心跳（距离目标 <= 60s 时每 250ms 推一次，彻底告别 Dart 后台 Timer 休眠卡死！）
+                val shouldNudgeDart = (remMs <= 60_000L && remMs >= -15_000L) || (secBucket % 3L == 0L)
+                if (shouldNudgeDart) {
+                    mainHandler.post {
+                        try {
+                            MainActivity.activeChannel?.invokeMethod("onNativeTick", remMs)
+                        } catch (_: Exception) {}
+                    }
+                }
+            } catch (_: Throwable) {}
+        }, 250L, 250L, TimeUnit.MILLISECONDS)
+    }
+
+    private fun stopNativeHeartbeat() {
+        val exec = heartbeatExec
+        heartbeatExec = null
+        try {
+            exec?.shutdownNow()
+        } catch (_: Exception) {}
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val persisted = RushAlarmStore.readState(this)
+        val summary = intent?.getStringExtra(RushAlarmStore.EXTRA_SUMMARY)
+            ?.takeIf { it.isNotBlank() }
+            ?: (persisted["summary"] as? String)?.takeIf { it.isNotBlank() }
+            ?: "06:30 准点抢座守夜中"
+        val fireAtEpochMs = intent?.getLongExtra(RushAlarmStore.EXTRA_FIRE_AT_MS, 0L)
+            ?.takeIf { it > 0L }
+            ?: (persisted["fireAtEpochMs"] as? Long ?: 0L)
+
+        currentSummary = summary
+        currentFireAtMs = fireAtEpochMs
+        if (sessionStartedAtMs <= 0L) {
+            sessionStartedAtMs = System.currentTimeMillis()
+        }
+        lastNotifUpdateSec = -1L
+
+        // 先激活 MediaSession 并绑定 MediaStyle 通知，让 vivo OriginOS / 小米 / OPPO 正式按活跃媒体播放级别免冻结
+        ensureMediaSession(summary, fireAtEpochMs)
+        val notification = buildGuardNotification(summary)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             try {
@@ -927,10 +1096,11 @@ class RushForegroundService : Service() {
             startForeground(6300, notification)
         }
 
-        // 确保静音防墓碑音频轨在服务运行期内始终活跃（冷启动复活时也可自启）
+        // 启动实时流不可闻防墓碑音频轨 + 原生倒计时与 Dart 驱动心跳
         SilentAudioKeepAlive.start()
+        startNativeHeartbeat()
 
-        // 动态计算 WakeLock 时长：覆盖到目标开抢时间后 20 分钟（最长 26 小时），彻底解决晚上提前开启导致 10h 过期问题
+        // 动态计算 WakeLock 时长：覆盖到目标开抢时间后 20 分钟（最长 26 小时）
         val nowMs = System.currentTimeMillis()
         val dynamicMs = if (fireAtEpochMs > nowMs) {
             ((fireAtEpochMs - nowMs) + 20 * 60 * 1000L)
@@ -972,7 +1142,14 @@ class RushForegroundService : Service() {
     }
 
     override fun onDestroy() {
+        stopNativeHeartbeat()
         SilentAudioKeepAlive.stop()
+        try {
+            mediaSession?.isActive = false
+            mediaSession?.release()
+        } catch (_: Exception) {}
+        mediaSession = null
+        sessionStartedAtMs = 0L
         try {
             wakeLock?.let { if (it.isHeld) it.release() }
         } catch (_: Exception) {}
@@ -1000,7 +1177,7 @@ class RushAlarmReceiver : BroadcastReceiver() {
         val fireAtEpochMs = state["fireAtEpochMs"] as? Long ?: 0L
         val stage = intent?.getStringExtra(RushAlarmStore.EXTRA_ALARM_STAGE) ?: "wake"
 
-        // 1. 立即锁定 CPU 3 分钟 + 启动静音防冻结音频轨 + 恢复前台守夜服务与 WifiLock
+        // 1. 立即锁定 CPU 3 分钟 + 启动实时流防冻结音频轨 + 恢复 MediaSession 前台守夜服务与 WifiLock
         val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
         try {
             val wl = pm.newWakeLock(
@@ -1014,9 +1191,15 @@ class RushAlarmReceiver : BroadcastReceiver() {
         SilentAudioKeepAlive.start()
         RushAlarmStore.startForegroundGuard(context, summary, fireAtEpochMs)
 
-        // 2. 关键修复（针对 vivo OriginOS / 小米 / OPPO Android 14 墓碑冻结机制）：
-        //    当手机锁屏或 App 在后台时，进程可能处于「未死但被 Linux cgroup 冻结」状态，此时 activeChannel 非空但 Dart 引擎已被暂停！
-        //    因此只要屏幕处于熄灭或界面不在前台，无论进程是被杀还是被冻结，都必须主动拉起 MainActivity + fullScreenIntent 解冻！
+        // 2. 关键修复：使用 goAsync() 持有 7.5 秒活跃广播租约，阻止 OriginOS/HyperOS 在 onReceive 返回 2ms 后立即重冻结，
+        //    同时每 250ms 在主线程推送 onNativeTick，强保 Flutter Dart 1.ui 线程拿到完整 CPU 时间片完成登录与下单！
+        val pendingResult = try {
+            goAsync()
+        } catch (_: Exception) {
+            null
+        }
+        val mainHandler = Handler(Looper.getMainLooper())
+
         val channel = MainActivity.activeChannel
         val isScreenOn = try {
             pm.isInteractive
@@ -1042,6 +1225,31 @@ class RushAlarmReceiver : BroadcastReceiver() {
             channel.invokeMethod("onAlarmFired", "exact_alarm_$stage")
         } else {
             RushAlarmStore.markColdStartTriggered(context)
+        }
+
+        if (pendingResult != null) {
+            Thread({
+                try {
+                    val endAt = System.currentTimeMillis() + 7_500L
+                    while (System.currentTimeMillis() < endAt) {
+                        val remMs = if (fireAtEpochMs > 0L) fireAtEpochMs - System.currentTimeMillis() else 0L
+                        mainHandler.post {
+                            try {
+                                MainActivity.activeChannel?.invokeMethod("onNativeTick", remMs)
+                            } catch (_: Exception) {}
+                        }
+                        Thread.sleep(250L)
+                    }
+                } catch (_: Throwable) {
+                } finally {
+                    try {
+                        pendingResult.finish()
+                    } catch (_: Exception) {}
+                }
+            }, "LNU-AlarmLease-$stage").apply {
+                isDaemon = true
+                start()
+            }
         }
 
         if (needSurfaceWakeup) {

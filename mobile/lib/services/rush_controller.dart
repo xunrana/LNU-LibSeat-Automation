@@ -120,6 +120,7 @@ class MobileRushController extends ChangeNotifier {
   bool focusRunning = false;
 
   StreamSubscription<String>? _deepLinkSub;
+  StreamSubscription<int>? _nativeTickSub;
 
   MobileRushController({required this.config}) {
     _deepLinkSub = BackgroundSchedulerService.instance.onDeepLinkCommand.listen(
@@ -133,6 +134,20 @@ class MobileRushController extends ChangeNotifier {
         }
       },
     );
+    _nativeTickSub = BackgroundSchedulerService.instance.onNativeTick.listen(
+      (_) {
+        if (isRunning) {
+          _activeStopToken?.nudge();
+        }
+      },
+    );
+  }
+
+  /// 外部（如前后台切换恢复或原生心跳）触发立即唤醒等待循环。
+  void nudgeActiveTimer() {
+    if (isRunning) {
+      _activeStopToken?.nudge();
+    }
   }
 
   /// App 冷启动后检测是否由 Android 隔夜闹钟拉起，或上次隔夜守夜进程曾被系统回收需要自动接力。
@@ -264,17 +279,17 @@ class MobileRushController extends ChangeNotifier {
       );
       if (guardRes.ok) {
         final fgsDesc = guardRes.fgsStarted
-            ? '前台守夜已挂起'
+            ? 'MediaSession+前台守夜已挂起'
             : '前台服务降级(${guardRes.fgsMessage})';
         final audioDesc = guardRes.silentAudioActive
-            ? '静音防冻结=已激活(${guardRes.silentAudioInfo})'
-            : '静音防冻结=未启(${guardRes.silentAudioInfo})';
+            ? '实时流防冻结=已激活(${guardRes.silentAudioInfo})'
+            : '实时流防冻结=未启(${guardRes.silentAudioInfo})';
         final alarmDesc = guardRes.alarmScheduled
             ? '${guardRes.alarmMode}×${guardRes.alarmCount}段(${formatHms(sched.prepAt)}→${formatHms(sched.fireAt)})'
             : '未挂闹钟(${guardRes.alarmMode})';
         appendLog(
           'system',
-          '🛡️ 隔夜防杀实况：$fgsDesc · $audioDesc · 闹钟=$alarmDesc · 动态锁+WiFi锁',
+          '🛡️ 隔夜防杀实况：$fgsDesc · $audioDesc · 闹钟=$alarmDesc · 通知栏实时倒计时已启',
         );
         final status = await BackgroundSchedulerService.instance
             .getAndroidKeepAliveStatus();
@@ -1021,6 +1036,7 @@ class MobileRushController extends ChangeNotifier {
   @override
   void dispose() {
     _deepLinkSub?.cancel();
+    _nativeTickSub?.cancel();
     _activeStopToken?.cancel();
     _watchTimer?.cancel();
     _tempLeaveTimer?.cancel();

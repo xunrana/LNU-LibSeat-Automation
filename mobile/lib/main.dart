@@ -66,8 +66,29 @@ class LnuMainShell extends StatefulWidget {
   State<LnuMainShell> createState() => _LnuMainShellState();
 }
 
-class _LnuMainShellState extends State<LnuMainShell> {
+class _LnuMainShellState extends State<LnuMainShell>
+    with WidgetsBindingObserver {
   int _currentIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      Future<void>.microtask(() {});
+      widget.controller.nudgeActiveTimer();
+    }
+  }
 
   static const List<LnuBottomNavItem> _navItems = <LnuBottomNavItem>[
     LnuBottomNavItem(

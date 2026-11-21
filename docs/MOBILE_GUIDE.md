@@ -72,8 +72,8 @@ mobile/
 
 | 项 | Android (`MainActivity.kt`) | iOS (`AppDelegate.swift`) |
 | :--- | :--- | :--- |
-| 后台保活 | `RushForegroundService`（`mediaPlayback\|specialUse`）+ `SilentAudioKeepAlive`（静态全零 PCM 静音 `AudioTrack`，不占 AudioFocus，防国产 ROM cgroup 冻结）+ 动态 `PARTIAL_WAKE_LOCK`（目标后 +20m，上限 26h）+ `WifiLock` | `UIBackgroundModes: audio` 内存生成 8kHz 16-bit 全零静音 WAV 循环播放（`.mixWithOthers`，结束后停止释放） |
-| 准点唤醒 | 四段式硬件闹钟链：`wake` (`prepAt - 20s`, 630)、`prep` (`prepAt`, 631)、`keepalive` (`keepaliveAt`, 632)、`fire` (`fireAt - 1s`, 633)；守夜期动态开启 `showWhenLocked + turnScreenOn`，闹钟触发同步点亮屏幕、发送 `fullScreenIntent` 并 `nudge()` 唤醒 Dart 等待循环；`RushBootReceiver` 重启恢复 | 静音音频流维持进程存活；支持 `lnulibseat://rush?mode=auto` 快捷指令深链 |
+| 后台保活 | `RushForegroundService`（`mediaPlayback\|specialUse` + `MediaSession STATE_PLAYING` + `Notification.MediaStyle` 实时倒计时）+ `SilentAudioKeepAlive`（`MODE_STREAM` 24kHz/-90dB 不可闻非零 PCM 活跃流，不占 AudioFocus）+ 原生 250ms 心跳直推 Dart `onNativeTick` + 动态 `PARTIAL_WAKE_LOCK`（上限 26h）+ `WifiLock` | `UIBackgroundModes: audio` 内存生成 8kHz 16-bit 全零静音 WAV 循环播放（`.mixWithOthers`，结束后停止释放） |
+| 准点唤醒 | 四段式硬件闹钟链（630/631/632/633）+ `goAsync()` 7.5s 广播租约保活；守夜期动态开启 `showWhenLocked + turnScreenOn`，息屏自动点亮 15s + `fullScreenIntent`；`RushBootReceiver` 重启恢复 | 静音音频流维持进程存活；支持 `lnulibseat://rush?mode=auto` 快捷指令深链 |
 | 签到提醒 | `AlarmManager` + `CheckinReminderReceiver`（预约前 15m 温和提醒、开始后 20m 紧急闹钟） | `UNUserNotificationCenter`（紧急节点启用 iOS 15+ `.timeSensitive`） |
 
 ---

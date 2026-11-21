@@ -108,7 +108,8 @@
 | 参数 | 值 | 平台 | 说明 |
 | :--- | :---: | :---: | :--- |
 | 四段式硬件闹钟链 | `wake` (`-35s`, 630) / `prep` (`-15s`, 631) / `keepalive` (`-5s`, 632) / `fire` (`-1s`, 633) | Android | `wake/prep/fire` 走 `setAlarmClock`，`keepalive` 走 `setExactAndAllowWhileIdle` |
-| 静音防冻结 `AudioTrack` | 原生采样率（回退 44100/48000/16000 Hz），16-bit Mono `MODE_STATIC` 循环，`volume=0.01f` | Android | 纯内存全零 PCM，不占 AudioFocus，规避国产 ROM 锁屏 10s 墓碑冻结 |
+| 实时流防冻结 `AudioTrack` | 原生采样率（回退 48000/44100/16000 Hz），16-bit Mono `MODE_STREAM` 每 500ms 写入 `±4` LSB × `0.25f`（24kHz / -90 dB）+ `MediaSession STATE_PLAYING` | Android | 物理不可闻且 `RMS > 0`，不占 AudioFocus，规避国产 ROM 静音假播放检测与 cgroup 冻结 |
+| 原生心跳与广播租约 | 通知栏 `1s` 刷新；临近 60s 内每 `250ms` 推 `onNativeTick`；闹钟 `goAsync()` 持有 `7.5s` 租约 | Android | 绕开 Flutter 后台 `Timer` 休眠并防止 `onReceive` 返回后立刻被重冻结 |
 | 动态 CPU `WakeLock` | `(fireAt - now) + 20m`，限幅 `[10m, 26h]` | Android | 覆盖前一天晚上开启至次日 06:50，未传有效时间时默认 `30m` |
 | 闹钟亮屏唤醒锁 | `15` 秒 (`SCREEN_DIM_WAKE_LOCK \| ACQUIRE_CAUSES_WAKEUP`) | Android | 息屏态闹钟触发时点亮屏幕拉起 `MainActivity` |
 | 冷启动状态过期窗口 | `fireAt + 10m` | Android | `RushAlarmStore.consumePendingState` 自动清理过期武装态 |

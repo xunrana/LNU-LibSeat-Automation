@@ -107,8 +107,11 @@ class BackgroundSchedulerService {
 
   final StreamController<String> _deepLinkController =
       StreamController<String>.broadcast();
+  final StreamController<int> _nativeTickController =
+      StreamController<int>.broadcast();
 
   Stream<String> get onDeepLinkCommand => _deepLinkController.stream;
+  Stream<int> get onNativeTick => _nativeTickController.stream;
 
   BackgroundSchedulerService._() {
     _channel.setMethodCallHandler(_handleNativeCall);
@@ -118,6 +121,9 @@ class BackgroundSchedulerService {
     if (call.method == 'onAlarmFired' || call.method == 'onDeepLink') {
       final cmd = (call.arguments ?? 'rush').toString();
       _deepLinkController.add(cmd);
+    } else if (call.method == 'onNativeTick') {
+      final remMs = (call.arguments as num?)?.toInt() ?? 0;
+      _nativeTickController.add(remMs);
     }
     return null;
   }

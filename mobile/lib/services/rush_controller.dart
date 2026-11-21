@@ -128,7 +128,8 @@ class MobileRushController extends ChangeNotifier {
           appendLog('system', '收到系统自动化唤醒指令 ($cmd)，正在启动约座...');
           startRush();
         } else if (cmd.startsWith('exact_alarm')) {
-          appendLog('system', '⏰ 系统闹钟已准点唤醒 CPU，隔夜守夜正常推进中');
+          _activeStopToken?.nudge();
+          appendLog('system', '⏰ 系统闹钟已准点唤醒 ($cmd)，推进隔夜守夜中');
         }
       },
     );
@@ -256,21 +257,24 @@ class MobileRushController extends ChangeNotifier {
       final guardRes = await BackgroundSchedulerService.instance
           .startAndroidForegroundRushService(
         prepAtBeijing: sched.prepAt,
+        keepaliveAtBeijing: sched.keepaliveAt,
         fireAtBeijing: sched.fireAt,
         targetSummary:
             '${sessionCfg.targetRoom} · ${formatHms(sched.fireAt)} 准点晨约',
       );
       if (guardRes.ok) {
-        final wakeAt = sched.prepAt.subtract(const Duration(seconds: 20));
         final fgsDesc = guardRes.fgsStarted
             ? '前台守夜已挂起'
             : '前台服务降级(${guardRes.fgsMessage})';
+        final audioDesc = guardRes.silentAudioActive
+            ? '静音防冻结=已激活(${guardRes.silentAudioInfo})'
+            : '静音防冻结=未启(${guardRes.silentAudioInfo})';
         final alarmDesc = guardRes.alarmScheduled
-            ? '${guardRes.alarmMode}(${formatHms(wakeAt)}/${formatHms(sched.prepAt)})'
+            ? '${guardRes.alarmMode}×${guardRes.alarmCount}段(${formatHms(sched.prepAt)}→${formatHms(sched.fireAt)})'
             : '未挂闹钟(${guardRes.alarmMode})';
         appendLog(
           'system',
-          '🛡️ 隔夜防杀实况：$fgsDesc · 唤醒闹钟=$alarmDesc · 动态锁+WiFi锁',
+          '🛡️ 隔夜防杀实况：$fgsDesc · $audioDesc · 闹钟=$alarmDesc · 动态锁+WiFi锁',
         );
         final status = await BackgroundSchedulerService.instance
             .getAndroidKeepAliveStatus();

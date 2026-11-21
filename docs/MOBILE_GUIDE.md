@@ -42,7 +42,7 @@ mobile/
 │   └── RushAlarmStore / RushForegroundService / RushAlarmReceiver / RushBootReceiver / CheckinReminderReceiver / BitmapFactory 解码
 ├── ios/Runner/AppDelegate.swift
 │   └── AVAudioPlayer 静音保活 / ImageIO+CoreGraphics 解码 / UNUserNotificationCenter / lnulibseat:// 深链
-└── test/                             # 19 项跨语言契约、Pillow SHA-256 与界面单测
+└── test/                             # 20 项跨语言契约、Pillow SHA-256 与界面单测
 ```
 
 ---
@@ -72,8 +72,8 @@ mobile/
 
 | 项 | Android (`MainActivity.kt`) | iOS (`AppDelegate.swift`) |
 | :--- | :--- | :--- |
-| 后台保活 | `RushForegroundService`（`SPECIAL_USE`，静音 `IMPORTANCE_DEFAULT` 通道）+ 动态 `PARTIAL_WAKE_LOCK`（目标后 +20m，上限 26h）+ `WifiLock` | `UIBackgroundModes: audio` 内存生成 8kHz 16-bit 全零静音 WAV 循环播放（`.mixWithOthers`，结束后停止释放） |
-| 准点唤醒 | `AlarmManager.setAlarmClock`（`prepAt - 20s`, code `630`）+ `setExactAndAllowWhileIdle`（`prepAt`, code `631`）；Android 14+ 冻结态以 `MODE_BACKGROUND_ACTIVITY_START_ALLOWED` + `CATEGORY_ALARM` 全屏唤醒强拉起；`RushBootReceiver` 负责重启恢复 | 静音音频流维持进程存活；支持 `lnulibseat://rush?mode=auto` 快捷指令深链 |
+| 后台保活 | `RushForegroundService`（`mediaPlayback\|specialUse`）+ `SilentAudioKeepAlive`（静态全零 PCM 静音 `AudioTrack`，不占 AudioFocus，防国产 ROM cgroup 冻结）+ 动态 `PARTIAL_WAKE_LOCK`（目标后 +20m，上限 26h）+ `WifiLock` | `UIBackgroundModes: audio` 内存生成 8kHz 16-bit 全零静音 WAV 循环播放（`.mixWithOthers`，结束后停止释放） |
+| 准点唤醒 | 四段式硬件闹钟链：`wake` (`prepAt - 20s`, 630)、`prep` (`prepAt`, 631)、`keepalive` (`keepaliveAt`, 632)、`fire` (`fireAt - 1s`, 633)；守夜期动态开启 `showWhenLocked + turnScreenOn`，闹钟触发同步点亮屏幕、发送 `fullScreenIntent` 并 `nudge()` 唤醒 Dart 等待循环；`RushBootReceiver` 重启恢复 | 静音音频流维持进程存活；支持 `lnulibseat://rush?mode=auto` 快捷指令深链 |
 | 签到提醒 | `AlarmManager` + `CheckinReminderReceiver`（预约前 15m 温和提醒、开始后 20m 紧急闹钟） | `UNUserNotificationCenter`（紧急节点启用 iOS 15+ `.timeSensitive`） |
 
 ---
@@ -90,7 +90,7 @@ mobile/
 ```bash
 python build_android.py
 ```
-会自动导出 5 个无损 ONNX 模型、打包 21 间自习室 `room_catalog.json`、生成黄金测试向量、跑通 `flutter test`（19 项全绿），并输出 `dist/辽宁大学图书馆座位预约.apk`（Releases 中命名为 `LNU-LibSeat-Android-arm64.apk`）。若只想准备资源不编 APK，运行 `python build_android.py --prepare-only`。
+会自动导出 5 个无损 ONNX 模型、打包 21 间自习室 `room_catalog.json`、生成黄金测试向量、跑通 `flutter test`（20 项全绿），并输出 `dist/辽宁大学图书馆座位预约.apk`（Releases 中命名为 `LNU-LibSeat-Android-arm64.apk`）。若只想准备资源不编 APK，运行 `python build_android.py --prepare-only`。
 
 ### 在 Mac 上构建免签名 iOS IPA
 ```bash

@@ -107,9 +107,10 @@
 
 | 参数 | 值 | 平台 | 说明 |
 | :--- | :---: | :---: | :--- |
-| 主唤醒闹钟提前量 | `prepAt - 20s`（如 `06:29:25`） | Android | `AlarmManager.setAlarmClock`（`ALARM_REQUEST_CODE = 630`） |
-| 预热轻推副闹钟 | `prepAt`（如 `06:29:45`） | Android | `setExactAndAllowWhileIdle`（`ALARM_BACKUP_REQUEST_CODE = 631`），防首闹钟后二次冻结 |
+| 四段式硬件闹钟链 | `wake` (`-35s`, 630) / `prep` (`-15s`, 631) / `keepalive` (`-5s`, 632) / `fire` (`-1s`, 633) | Android | `wake/prep/fire` 走 `setAlarmClock`，`keepalive` 走 `setExactAndAllowWhileIdle` |
+| 静音防冻结 `AudioTrack` | 原生采样率（回退 44100/48000/16000 Hz），16-bit Mono `MODE_STATIC` 循环，`volume=0.01f` | Android | 纯内存全零 PCM，不占 AudioFocus，规避国产 ROM 锁屏 10s 墓碑冻结 |
 | 动态 CPU `WakeLock` | `(fireAt - now) + 20m`，限幅 `[10m, 26h]` | Android | 覆盖前一天晚上开启至次日 06:50，未传有效时间时默认 `30m` |
+| 闹钟亮屏唤醒锁 | `15` 秒 (`SCREEN_DIM_WAKE_LOCK \| ACQUIRE_CAUSES_WAKEUP`) | Android | 息屏态闹钟触发时点亮屏幕拉起 `MainActivity` |
 | 冷启动状态过期窗口 | `fireAt + 10m` | Android | `RushAlarmStore.consumePendingState` 自动清理过期武装态 |
 | 静音保活音频规格 | `8000 Hz`, 16-bit Mono PCM, `1s` 循环, `volume=0.01` | iOS | 纯内存 16KB 全零 WAV（`.mixWithOthers` 不打断音乐） |
 | 签到防违约提醒节点 1 | 预约开始前 `15` 分钟 | Android & iOS | 温和提前提醒（如 `14:00` → `13:45`） |

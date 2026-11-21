@@ -14,9 +14,14 @@ import android.content.pm.ServiceInfo
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.ColorSpace
+import android.media.AudioAttributes
+import android.media.AudioFormat
+import android.media.AudioManager
+import android.media.AudioTrack
 import android.net.Uri
 import android.net.wifi.WifiManager
 import android.os.Build
+import android.os.Bundle
 import android.os.IBinder
 import android.os.PowerManager
 import android.provider.Settings
@@ -25,6 +30,122 @@ import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.nio.ByteBuffer
+
+/**
+ * Android 静音防墓碑冻结保活器（对标 iOS AppDelegate.swift 的 AVAudioPlayer 全零静音流）。
+ *
+ * 原理：vivo OriginOS 4 (PEM) / 小米 HyperOS (Millet) / OPPO ColorOS (Hans) / 华为 HarmonyOS
+ * 即便开启电池优化白名单，仍会在锁屏 10 秒后冻结普通 specialUse 前台服务的 Linux cgroup；
+ * 但所有国产 ROM 的冻结器都会检查 AudioFlinger 活跃音频轨，绝不冻结正在播放音频的 UID。
+ * 本类在定时守夜期间循环播放纯内存全零 PCM（绝对无声、不申请 AudioFocus、不打断任何音乐/视频、
+ * 不弹出锁屏媒体卡片），抢座结束或中止后立即 stop + release。
+ */
+object SilentAudioKeepAlive {
+    private val lock = Any()
+    private var audioTrack: AudioTrack? = null
+    @Volatile var activeSampleRate: Int = 0
+        private set
+
+    fun isActive(): Boolean = synchronized(lock) {
+        val t = audioTrack
+        t != null && t.state == AudioTrack.STATE_INITIALIZED && t.playState == AudioTrack.PLAYSTATE_PLAYING
+    }
+
+    fun start(): Pair<Boolean, String> = synchronized(lock) {
+        val existing = audioTrack
+        if (existing != null &&
+            existing.state == AudioTrack.STATE_INITIALIZED &&
+            existing.playState == AudioTrack.PLAYSTATE_PLAYING
+        ) {
+            return Pair(true, "${activeSampleRate}Hz")
+        }
+        stopLocked()
+
+        val nativeRate = try {
+            AudioTrack.getNativeOutputSampleRate(AudioManager.STREAM_MUSIC)
+                .takeIf { it in 8000..48000 } ?: 48000
+        } catch (_: Exception) {
+            48000
+        }
+        val candidateRates = linkedSetOf(nativeRate, 44100, 48000, 16000)
+        var lastErr = "init_failed"
+
+        for (rate in candidateRates) {
+            try {
+                // 1 秒 16-bit Mono 全零 PCM（纯内存静态循环，零后台线程开销，0.0000 dB 绝对无声）
+                val frameCount = rate
+                val silenceBytes = ByteArray(frameCount * 2)
+                val attrs = AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .build()
+                val fmt = AudioFormat.Builder()
+                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                    .setSampleRate(rate)
+                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                    .build()
+                val track = AudioTrack.Builder()
+                    .setAudioAttributes(attrs)
+                    .setAudioFormat(fmt)
+                    .setBufferSizeInBytes(silenceBytes.size)
+                    .setTransferMode(AudioTrack.MODE_STATIC)
+                    .build()
+                if (track.state != AudioTrack.STATE_INITIALIZED) {
+                    track.release()
+                    lastErr = "uninitialized_$rate"
+                    continue
+                }
+                val written = track.write(silenceBytes, 0, silenceBytes.size)
+                if (written <= 0) {
+                    track.release()
+                    lastErr = "write_$written"
+                    continue
+                }
+                val loopRes = track.setLoopPoints(0, frameCount, -1)
+                if (loopRes != AudioTrack.SUCCESS) {
+                    track.release()
+                    lastErr = "loop_$loopRes"
+                    continue
+                }
+                // PCM 采样全为 0（绝对无声）；设非零微小增益避免 OEM 将 0.0 音量轨视作静音可挂起
+                track.setVolume(0.01f)
+                track.play()
+                audioTrack = track
+                activeSampleRate = rate
+                return Pair(true, "${rate}Hz")
+            } catch (exc: Exception) {
+                lastErr = exc.message ?: exc.javaClass.simpleName
+            }
+        }
+        return Pair(false, lastErr)
+    }
+
+    fun stop() = synchronized(lock) {
+        stopLocked()
+    }
+
+    private fun stopLocked() {
+        val t = audioTrack
+        audioTrack = null
+        activeSampleRate = 0
+        if (t != null) {
+            try {
+                if (t.playState == AudioTrack.PLAYSTATE_PLAYING) {
+                    t.pause()
+                }
+            } catch (_: Exception) {}
+            try {
+                t.flush()
+            } catch (_: Exception) {}
+            try {
+                t.stop()
+            } catch (_: Exception) {}
+            try {
+                t.release()
+            } catch (_: Exception) {}
+        }
+    }
+}
 
 object RushAlarmStore {
     private const val PREF_NAME = "lnu_rush_alarm_prefs"
@@ -36,11 +157,13 @@ object RushAlarmStore {
     private const val KEY_FIRED_MS = "fired_epoch_ms"
 
     const val ALARM_REQUEST_CODE = 630
-    const val ALARM_BACKUP_REQUEST_CODE = 631
+    const val ALARM_PREP_REQUEST_CODE = 631
+    const val ALARM_KEEPALIVE_REQUEST_CODE = 632
+    const val ALARM_FIRE_REQUEST_CODE = 633
     const val WAKEUP_NOTIF_ID = 6301
     const val WAKEUP_CHANNEL_ID = "lnu_libseat_rush_wakeup"
     const val EXTRA_FROM_EXACT_ALARM = "from_exact_alarm"
-    const val EXTRA_IS_PREP_NUDGE = "is_prep_nudge"
+    const val EXTRA_ALARM_STAGE = "alarm_stage"
     const val EXTRA_SUMMARY = "summary"
     const val EXTRA_FIRE_AT_MS = "fire_at_epoch_ms"
 
@@ -113,35 +236,31 @@ object RushAlarmStore {
     }
 
     /**
-     * 使用系统最高优先级 AlarmClock 闹钟调度（与系统闹钟同级，穿透国产 ROM 夜间深度休眠与省电冻结）。
-     * 若提供了 prepAtEpochMs（比首次唤醒晚 20s，即预热登录时刻），同时挂载第二道准点轻推闹钟防再次冻结。
-     * 返回 Pair(是否成功, 实际调度模式或错误说明)。
+     * 四段式硬件 RTC 闹钟保底链：
+     * - 630 (wake)      : prepAt - 20s（如 06:29:25）setAlarmClock 主唤醒
+     * - 631 (prep)      : prepAt      （如 06:29:45）setAlarmClock 预热登录解冻
+     * - 632 (keepalive) : keepaliveAt （如 06:29:55）setExactAndAllowWhileIdle 保活复校解冻
+     * - 633 (fire)      : fireAt - 1s （如 06:29:59）setAlarmClock 准点开抢前 1 秒最高优解冻
+     *
+     * 彻底消灭 06:29:55 → 06:30:00 的 5 秒空窗（原 10 秒广播宽限期恰好在 06:29:55 过期）。
+     * 返回 Triple(是否至少挂起1个闹钟, 主模式说明, 实际挂载闹钟数量)。
      */
-    fun scheduleRushAlarmClock(
+    fun scheduleRushAlarmChain(
         context: Context,
         triggerAtEpochMs: Long,
-        prepAtEpochMs: Long = 0L
-    ): Pair<Boolean, String> {
+        prepAtEpochMs: Long = 0L,
+        keepaliveAtEpochMs: Long = 0L,
+        fireAtEpochMs: Long = 0L
+    ): Triple<Boolean, String, Int> {
         val nowMs = System.currentTimeMillis()
-        if (triggerAtEpochMs <= nowMs && prepAtEpochMs <= nowMs) {
-            return Pair(false, "trigger_in_past")
-        }
         val appCtx = context.applicationContext
         val alarmManager = appCtx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val effectivePrimary = if (triggerAtEpochMs > nowMs) triggerAtEpochMs else prepAtEpochMs
-        val alarmIntent = Intent(appCtx, RushAlarmReceiver::class.java)
-        val pending = PendingIntent.getBroadcast(
-            appCtx,
-            ALARM_REQUEST_CODE,
-            alarmIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
         val showIntent = Intent(appCtx, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
         val showPending = PendingIntent.getActivity(
             appCtx,
-            ALARM_REQUEST_CODE + 2,
+            ALARM_REQUEST_CODE + 10,
             showIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
@@ -150,74 +269,105 @@ object RushAlarmStore {
         } else {
             true
         }
-        val primaryRes = try {
-            if (canExact && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                alarmManager.setAlarmClock(
-                    AlarmManager.AlarmClockInfo(effectivePrimary, showPending),
-                    pending
-                )
-                Pair(true, "AlarmClock")
-            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                alarmManager.setAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    effectivePrimary,
-                    pending
-                )
-                Pair(true, "InexactIdle")
-            } else {
-                alarmManager.setExact(AlarmManager.RTC_WAKEUP, effectivePrimary, pending)
-                Pair(true, "ExactLegacy")
-            }
-        } catch (se: SecurityException) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                alarmManager.setAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    effectivePrimary,
-                    pending
-                )
-                Pair(true, "FallbackInexact(${se.javaClass.simpleName})")
-            } else {
-                alarmManager.set(AlarmManager.RTC_WAKEUP, effectivePrimary, pending)
-                Pair(true, "FallbackLegacy")
-            }
-        } catch (exc: Exception) {
-            Pair(false, exc.message ?: exc.javaClass.simpleName)
-        }
 
-        // 第二道准点轻推闹钟（在 prepAt 时刻再次补唤醒 CPU，防首闹钟后 20s 内被 OEM 二次冻结）
-        if (prepAtEpochMs > effectivePrimary + 3_000L) {
-            try {
-                val backupIntent = Intent(appCtx, RushAlarmReceiver::class.java).apply {
-                    putExtra(EXTRA_IS_PREP_NUDGE, true)
-                }
-                val backupPending = PendingIntent.getBroadcast(
-                    appCtx,
-                    ALARM_BACKUP_REQUEST_CODE,
-                    backupIntent,
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                )
-                if (canExact && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        val fireNudgeMs = if (fireAtEpochMs > 1_000L) fireAtEpochMs - 1_000L else 0L
+        // (reqCode, triggerMs, stageName, preferAlarmClock)
+        val rawStages = listOf(
+            Quad(ALARM_REQUEST_CODE, triggerAtEpochMs, "wake", true),
+            Quad(ALARM_PREP_REQUEST_CODE, prepAtEpochMs, "prep", true),
+            Quad(ALARM_KEEPALIVE_REQUEST_CODE, keepaliveAtEpochMs, "keepalive", false),
+            Quad(ALARM_FIRE_REQUEST_CODE, fireNudgeMs, "fire", true),
+        )
+
+        var scheduledCount = 0
+        var primaryMode = "trigger_in_past"
+        var lastScheduledMs = 0L
+
+        for (stage in rawStages) {
+            val tMs = stage.triggerMs
+            if (tMs <= nowMs + 500L) {
+                continue
+            }
+            // 与上一闹钟间隔 < 2s 时跳过，避免重复打断（但 fire 阶段始终保留）
+            if (stage.stageName != "fire" && lastScheduledMs > 0L && kotlin.math.abs(tMs - lastScheduledMs) < 2_000L) {
+                continue
+            }
+            val alarmIntent = Intent(appCtx, RushAlarmReceiver::class.java).apply {
+                putExtra(EXTRA_ALARM_STAGE, stage.stageName)
+            }
+            val pending = PendingIntent.getBroadcast(
+                appCtx,
+                stage.reqCode,
+                alarmIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val mode = try {
+                if (canExact && stage.preferAlarmClock && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    alarmManager.setAlarmClock(
+                        AlarmManager.AlarmClockInfo(tMs, showPending),
+                        pending
+                    )
+                    "AlarmClock"
+                } else if (canExact && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                     alarmManager.setExactAndAllowWhileIdle(
                         AlarmManager.RTC_WAKEUP,
-                        prepAtEpochMs,
-                        backupPending
+                        tMs,
+                        pending
                     )
+                    "ExactIdle"
                 } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                     alarmManager.setAndAllowWhileIdle(
                         AlarmManager.RTC_WAKEUP,
-                        prepAtEpochMs,
-                        backupPending
+                        tMs,
+                        pending
                     )
+                    "InexactIdle"
+                } else {
+                    alarmManager.setExact(AlarmManager.RTC_WAKEUP, tMs, pending)
+                    "ExactLegacy"
                 }
-            } catch (_: Exception) {}
+            } catch (se: SecurityException) {
+                try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, tMs, pending)
+                        "FallbackInexact"
+                    } else {
+                        alarmManager.set(AlarmManager.RTC_WAKEUP, tMs, pending)
+                        "FallbackLegacy"
+                    }
+                } catch (_: Exception) {
+                    null
+                }
+            } catch (_: Exception) {
+                null
+            }
+            if (mode != null) {
+                if (scheduledCount == 0) {
+                    primaryMode = mode
+                }
+                scheduledCount += 1
+                lastScheduledMs = tMs
+            }
         }
-        return primaryRes
+        return Triple(scheduledCount > 0, primaryMode, scheduledCount)
     }
+
+    private data class Quad(
+        val reqCode: Int,
+        val triggerMs: Long,
+        val stageName: String,
+        val preferAlarmClock: Boolean,
+    )
 
     fun cancelRushAlarmClock(context: Context) {
         val appCtx = context.applicationContext
         val alarmManager = appCtx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        for (reqCode in intArrayOf(ALARM_REQUEST_CODE, ALARM_BACKUP_REQUEST_CODE)) {
+        for (reqCode in intArrayOf(
+            ALARM_REQUEST_CODE,
+            ALARM_PREP_REQUEST_CODE,
+            ALARM_KEEPALIVE_REQUEST_CODE,
+            ALARM_FIRE_REQUEST_CODE
+        )) {
             val alarmIntent = Intent(appCtx, RushAlarmReceiver::class.java)
             val pending = PendingIntent.getBroadcast(
                 appCtx,
@@ -260,6 +410,15 @@ class MainActivity : FlutterActivity() {
 
     private var boundChannel: MethodChannel? = null
 
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        val armed = (RushAlarmStore.readState(this)["armed"] as? Boolean) == true
+        val fromAlarm = intent?.getBooleanExtra(RushAlarmStore.EXTRA_FROM_EXACT_ALARM, false) == true
+        if (armed || fromAlarm) {
+            allowWakeOverLockScreen()
+        }
+    }
+
     override fun onResume() {
         super.onResume()
         isActivityResumed = true
@@ -284,11 +443,14 @@ class MainActivity : FlutterActivity() {
                         ?: (triggerAtEpochMs + 20_000L)
                     val fireAtEpochMs = call.argument<Number>("fireAtEpochMs")?.toLong()
                         ?: (prepAtEpochMs + 15_000L)
+                    val keepaliveAtEpochMs = call.argument<Number>("keepaliveAtEpochMs")?.toLong()
+                        ?: (fireAtEpochMs - 5_000L)
                     val summary = call.argument<String>("summary") ?: "06:30 准点抢座守夜中"
                     result.success(
                         startRushServiceAndAlarm(
                             triggerAtEpochMs,
                             prepAtEpochMs,
+                            keepaliveAtEpochMs,
                             fireAtEpochMs,
                             summary
                         )
@@ -399,33 +561,57 @@ class MainActivity : FlutterActivity() {
         } catch (_: Exception) {}
     }
 
+    private fun clearWakeOverLockScreen() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                setShowWhenLocked(false)
+                setTurnScreenOn(false)
+            } else {
+                @Suppress("DEPRECATION")
+                window.clearFlags(
+                    WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                        WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+                )
+            }
+        } catch (_: Exception) {}
+    }
+
     private fun startRushServiceAndAlarm(
         triggerAtEpochMs: Long,
         prepAtEpochMs: Long,
+        keepaliveAtEpochMs: Long,
         fireAtEpochMs: Long,
         summary: String
     ): Map<String, Any> {
         RushAlarmStore.saveArmed(this, triggerAtEpochMs, fireAtEpochMs, summary)
+        // 定时守夜期间允许闹钟在锁屏上直接亮屏并唤醒 MainActivity
+        allowWakeOverLockScreen()
+        // 前台即时激活静音防墓碑音频轨（对标 iOS 静音保活，vivo/小米/OPPO/华为内核均不冻结活跃播放 UID）
+        val (audioOk, audioInfo) = SilentAudioKeepAlive.start()
         val (fgsOk, fgsMsg) = RushAlarmStore.startForegroundGuard(this, summary, fireAtEpochMs)
-        var alarmOk = false
-        var alarmMode = "not_needed"
-        val nowMs = System.currentTimeMillis()
-        if (triggerAtEpochMs > nowMs || prepAtEpochMs > nowMs) {
-            val res = RushAlarmStore.scheduleRushAlarmClock(this, triggerAtEpochMs, prepAtEpochMs)
-            alarmOk = res.first
-            alarmMode = res.second
-        }
+        val (alarmOk, alarmMode, alarmCount) = RushAlarmStore.scheduleRushAlarmChain(
+            this,
+            triggerAtEpochMs = triggerAtEpochMs,
+            prepAtEpochMs = prepAtEpochMs,
+            keepaliveAtEpochMs = keepaliveAtEpochMs,
+            fireAtEpochMs = fireAtEpochMs
+        )
         return hashMapOf<String, Any>(
-            "ok" to (fgsOk || alarmOk),
+            "ok" to (fgsOk || alarmOk || audioOk),
             "fgsStarted" to fgsOk,
             "fgsMessage" to fgsMsg,
             "alarmScheduled" to alarmOk,
-            "alarmMode" to alarmMode
+            "alarmMode" to alarmMode,
+            "alarmCount" to alarmCount,
+            "silentAudioActive" to audioOk,
+            "silentAudioInfo" to audioInfo
         )
     }
 
     private fun stopRushServiceAndAlarm() {
         RushAlarmStore.clearAll(this)
+        SilentAudioKeepAlive.stop()
+        clearWakeOverLockScreen()
         stopService(Intent(this, RushForegroundService::class.java))
         RushAlarmStore.cancelRushAlarmClock(this)
     }
@@ -721,10 +907,28 @@ class RushForegroundService : Service() {
             .build()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(6300, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+            try {
+                startForeground(
+                    6300,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK or
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                )
+            } catch (_: Exception) {
+                startForeground(6300, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+            }
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            try {
+                startForeground(6300, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+            } catch (_: Exception) {
+                startForeground(6300, notification)
+            }
         } else {
             startForeground(6300, notification)
         }
+
+        // 确保静音防墓碑音频轨在服务运行期内始终活跃（冷启动复活时也可自启）
+        SilentAudioKeepAlive.start()
 
         // 动态计算 WakeLock 时长：覆盖到目标开抢时间后 20 分钟（最长 26 小时），彻底解决晚上提前开启导致 10h 过期问题
         val nowMs = System.currentTimeMillis()
@@ -768,6 +972,7 @@ class RushForegroundService : Service() {
     }
 
     override fun onDestroy() {
+        SilentAudioKeepAlive.stop()
         try {
             wakeLock?.let { if (it.isHeld) it.release() }
         } catch (_: Exception) {}
@@ -793,8 +998,9 @@ class RushAlarmReceiver : BroadcastReceiver() {
         val summary = (state["summary"] as? String)?.takeIf { it.isNotBlank() }
             ?: "准点抢座闹钟已触发，正在执行"
         val fireAtEpochMs = state["fireAtEpochMs"] as? Long ?: 0L
+        val stage = intent?.getStringExtra(RushAlarmStore.EXTRA_ALARM_STAGE) ?: "wake"
 
-        // 1. 立即锁定 CPU 3 分钟 + 恢复前台守夜服务与 WifiLock
+        // 1. 立即锁定 CPU 3 分钟 + 启动静音防冻结音频轨 + 恢复前台守夜服务与 WifiLock
         val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
         try {
             val wl = pm.newWakeLock(
@@ -805,6 +1011,7 @@ class RushAlarmReceiver : BroadcastReceiver() {
             wl.acquire(180 * 1000L)
         } catch (_: Exception) {}
 
+        SilentAudioKeepAlive.start()
         RushAlarmStore.startForegroundGuard(context, summary, fireAtEpochMs)
 
         // 2. 关键修复（针对 vivo OriginOS / 小米 / OPPO Android 14 墓碑冻结机制）：
@@ -818,8 +1025,21 @@ class RushAlarmReceiver : BroadcastReceiver() {
         }
         val needSurfaceWakeup = channel == null || !MainActivity.isActivityResumed || !isScreenOn
 
+        // 息屏态顺手点亮屏幕 15 秒，确保 WindowManager 将 MainActivity 拉到锁屏最前台 (OOM_ADJ=0)
+        if (!isScreenOn) {
+            try {
+                @Suppress("DEPRECATION")
+                val screenWl = pm.newWakeLock(
+                    PowerManager.SCREEN_DIM_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                    "LNU-LibSeat::AlarmScreenWakeLock"
+                )
+                screenWl.setReferenceCounted(false)
+                screenWl.acquire(15 * 1000L)
+            } catch (_: Exception) {}
+        }
+
         if (channel != null) {
-            channel.invokeMethod("onAlarmFired", "exact_alarm_wake")
+            channel.invokeMethod("onAlarmFired", "exact_alarm_$stage")
         } else {
             RushAlarmStore.markColdStartTriggered(context)
         }
@@ -908,7 +1128,14 @@ class RushBootReceiver : BroadcastReceiver() {
         }
         val effectiveTrigger = if (triggerMs > nowMs) triggerMs else nowMs + 5_000L
         val prepMs = (fireMs - 15_000L).coerceAtLeast(0L)
-        RushAlarmStore.scheduleRushAlarmClock(context, effectiveTrigger, prepMs)
+        val keepaliveMs = (fireMs - 5_000L).coerceAtLeast(0L)
+        RushAlarmStore.scheduleRushAlarmChain(
+            context,
+            triggerAtEpochMs = effectiveTrigger,
+            prepAtEpochMs = prepMs,
+            keepaliveAtEpochMs = keepaliveMs,
+            fireAtEpochMs = fireMs
+        )
     }
 }
 

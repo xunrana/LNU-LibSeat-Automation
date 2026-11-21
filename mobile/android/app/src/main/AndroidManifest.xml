@@ -9,6 +9,7 @@
     <!-- 06:30 定时抢座隔夜后台保活、闹钟级唤醒、开机恢复与电池优化白名单权限 -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
@@ -51,12 +52,12 @@
             </intent-filter>
         </activity>
 
-        <!-- 06:30 守夜常驻前台服务 -->
+        <!-- 06:30 守夜常驻前台服务（mediaPlayback 静音防墓碑冻结 + specialUse） -->
         <service
             android:name=".RushForegroundService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="specialUse">
+            android:foregroundServiceType="mediaPlayback|specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="scheduled_library_seat_reservation_at_0630" />

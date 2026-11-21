@@ -25,6 +25,9 @@ class ForegroundGuardStartResult {
   final String fgsMessage;
   final bool alarmScheduled;
   final String alarmMode;
+  final int alarmCount;
+  final bool silentAudioActive;
+  final String silentAudioInfo;
 
   const ForegroundGuardStartResult({
     this.ok = false,
@@ -32,6 +35,9 @@ class ForegroundGuardStartResult {
     this.fgsMessage = '',
     this.alarmScheduled = false,
     this.alarmMode = '',
+    this.alarmCount = 0,
+    this.silentAudioActive = false,
+    this.silentAudioInfo = '',
   });
 }
 
@@ -127,10 +133,11 @@ class BackgroundSchedulerService {
     } catch (_) {}
   }
 
-  /// Android 专属：启动隔夜前台常驻守夜服务（动态 26h WakeLock + WifiLock）
-  /// 并注册系统最高优先级 AlarmClock 唤醒闹钟（提前 prepAt 20 秒唤醒，给冷启动/解冻留足加载时间）。
+  /// Android 专属：启动隔夜前台常驻守夜服务（静音防冻结音频轨 + 动态 26h WakeLock + WifiLock）
+  /// 并注册四段式系统硬件闹钟链（wake -20s / prep -15s / keepalive -5s / fire -1s）。
   Future<ForegroundGuardStartResult> startAndroidForegroundRushService({
     required DateTime prepAtBeijing,
+    DateTime? keepaliveAtBeijing,
     DateTime? fireAtBeijing,
     required String targetSummary,
   }) async {
@@ -141,10 +148,15 @@ class BackgroundSchedulerService {
       final wakeBj = prepAtBeijing.subtract(const Duration(seconds: 20));
       final fireBj =
           fireAtBeijing ?? prepAtBeijing.add(const Duration(seconds: 15));
+      final keepaliveBj = keepaliveAtBeijing ??
+          fireBj.subtract(const Duration(seconds: 5));
       final triggerEpochMs = wakeBj
           .subtract(const Duration(hours: 8))
           .millisecondsSinceEpoch;
       final prepEpochMs = prepAtBeijing
+          .subtract(const Duration(hours: 8))
+          .millisecondsSinceEpoch;
+      final keepaliveEpochMs = keepaliveBj
           .subtract(const Duration(hours: 8))
           .millisecondsSinceEpoch;
       final fireEpochMs = fireBj
@@ -155,6 +167,7 @@ class BackgroundSchedulerService {
         <String, dynamic>{
           'triggerAtEpochMs': triggerEpochMs,
           'prepAtEpochMs': prepEpochMs,
+          'keepaliveAtEpochMs': keepaliveEpochMs,
           'fireAtEpochMs': fireEpochMs,
           'summary': targetSummary,
         },
@@ -166,6 +179,9 @@ class BackgroundSchedulerService {
           fgsMessage: (raw['fgsMessage'] ?? '').toString(),
           alarmScheduled: raw['alarmScheduled'] == true,
           alarmMode: (raw['alarmMode'] ?? '').toString(),
+          alarmCount: (raw['alarmCount'] as num?)?.toInt() ?? 0,
+          silentAudioActive: raw['silentAudioActive'] == true,
+          silentAudioInfo: (raw['silentAudioInfo'] ?? '').toString(),
         );
       }
       if (raw == true) {

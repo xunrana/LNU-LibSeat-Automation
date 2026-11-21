@@ -12,6 +12,7 @@ import 'package:lnu_libseat_mobile/core/captcha/siamese_onnx.dart';
 import 'package:lnu_libseat_mobile/core/clock_sync.dart';
 import 'package:lnu_libseat_mobile/core/libseat_client.dart';
 import 'package:lnu_libseat_mobile/core/protocol.dart';
+import 'package:lnu_libseat_mobile/core/rate_limiter.dart';
 import 'package:lnu_libseat_mobile/core/session_recorder.dart';
 import 'package:lnu_libseat_mobile/logic/result_classifier.dart';
 import 'package:lnu_libseat_mobile/logic/seat_strategy.dart';
@@ -608,5 +609,23 @@ void main() {
       ),
       equals(PendingRushAction.none),
     );
+  });
+
+  test('CancelTokenSource.nudge() 可立刻唤醒休眠且不触发取消', () async {
+    final token = CancelTokenSource();
+    final sw = Stopwatch()..start();
+    Future<void>.delayed(const Duration(milliseconds: 40), token.nudge);
+    final ok = await token.sleepInterruptible(const Duration(seconds: 5));
+    sw.stop();
+    expect(ok, isTrue);
+    expect(token.isCancelled, isFalse);
+    expect(sw.elapsedMilliseconds, lessThan(1000));
+
+    // 确认 cancel() 仍返回 false
+    Future<void>.delayed(const Duration(milliseconds: 30), token.cancel);
+    final cancelledOk =
+        await token.sleepInterruptible(const Duration(seconds: 5));
+    expect(cancelledOk, isFalse);
+    expect(token.isCancelled, isTrue);
   });
 }

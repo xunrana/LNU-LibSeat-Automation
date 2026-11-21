@@ -133,7 +133,7 @@ python build_android.py
 # 在 Mac 上打包免签名 iOS IPA（输出 dist/LNU-LibSeat-iOS-arm64-unsigned.ipa）
 python3 build_ios.py
 
-# 单独运行移动端 19 项跨语言与界面单测
+# 单独运行移动端 20 项跨语言与界面单测
 cd mobile && flutter pub get && flutter test
 ```
 

@@ -16,12 +16,27 @@ class RateLimitCircuitOpenException implements Exception {
 }
 
 /// 可随时取消的停止信号令牌（对应 Python `threading.Event`）。
+///
+/// 支持 `nudge()` 唤醒正在 `sleepInterruptible()` 的等待循环（用于 Android 闹钟触发后
+/// 立刻重查时钟而不必等完残余 Timer 步长），且不改变 `isCancelled` 状态。
 class CancelTokenSource {
   bool _cancelled = false;
   final Completer<void> _completer = Completer<void>();
+  Completer<void> _nudgeCompleter = Completer<void>();
 
   bool get isCancelled => _cancelled;
   Future<void> get whenCancelled => _completer.future;
+
+  /// 唤醒当前所有挂起的 `sleepInterruptible` 调用（非取消，仅促使其立刻重查墙钟）。
+  void nudge() {
+    if (_cancelled) {
+      return;
+    }
+    if (!_nudgeCompleter.isCompleted) {
+      _nudgeCompleter.complete();
+    }
+    _nudgeCompleter = Completer<void>();
+  }
 
   void cancel() {
     if (!_cancelled) {
@@ -29,10 +44,13 @@ class CancelTokenSource {
       if (!_completer.isCompleted) {
         _completer.complete();
       }
+      if (!_nudgeCompleter.isCompleted) {
+        _nudgeCompleter.complete();
+      }
     }
   }
 
-  /// 可响应取消信号的异步休眠：正常结束返回 true，被取消返回 false。
+  /// 可响应取消信号与外部闹钟唤醒的异步休眠：正常/唤醒结束返回 true，被取消返回 false。
   Future<bool> sleepInterruptible(Duration duration) async {
     if (_cancelled) {
       return false;
@@ -40,9 +58,11 @@ class CancelTokenSource {
     if (duration <= Duration.zero) {
       return !_cancelled;
     }
+    final nudgeFuture = _nudgeCompleter.future;
     await Future.any<void>(<Future<void>>[
       Future<void>.delayed(duration),
       _completer.future,
+      nudgeFuture,
     ]);
     return !_cancelled;
   }

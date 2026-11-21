@@ -217,7 +217,7 @@ python gui_qt.py        # 启动桌面界面
 pip install pytest ruff
 pytest tests/ -q        # 92 项 Python 单测
 ruff check .
-cd mobile && flutter test  # 19 项 Flutter 跨语言契约与界面单测
+cd mobile && flutter test  # 20 项 Flutter 跨语言契约与界面单测
 ```
 
 **本地打包各端安装包：**

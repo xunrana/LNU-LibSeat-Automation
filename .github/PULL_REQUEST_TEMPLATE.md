@@ -14,12 +14,13 @@
 
 ## 自测清单
 
-- [ ] `pytest -m "not smoke"` 全绿
-- [ ] `ruff check --select E9,F63,F7,F82 .` 通过
-- [ ] 若改动抢座核心流程（`logic/booker.py`、`logic/auth.py`、`main.py`），已做（或计划做）真机端到端冒烟
-- [ ] 未提交 `config.py` 等敏感文件
-- [ ] 提交为 forward commit（未 rebase/force-push 改写历史）
+- [ ] `pytest tests/ -q` 全绿（92 项 Python 离线单测）
+- [ ] `ruff check .` 0 告警通过
+- [ ] 若改动 `mobile/` 或跨语言协议/预处理逻辑，`cd mobile && flutter test`（19 项单测）与 `flutter analyze` 通过
+- [ ] 若改动抢座核心流程（`core/libseat_client.py`、`logic/booker.py`、`logic/orchestrator.py`、`mobile/lib/core/`），已做（或计划做）非整点真机端到端验证
+- [ ] 未提交 `config.py`、真实学号/密码/Token 等敏感数据
+- [ ] 提交为 forward commit（未 rebase / force-push 改写历史）
 
 ## 备注
 
-<!-- 截图、relevant issue 链接、需要 reviewer 注意的点 -->
+<!-- 截图、相关 Issue 链接、需要 reviewer 注意的点 -->

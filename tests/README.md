@@ -22,3 +22,4 @@ pytest tests/ -q
 | `test_email_manual.py` | 邮件排版手动发送测试脚本 |
 
 > 工具配置集中在仓库根 [`pyproject.toml`](../pyproject.toml)，CI 配置见 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)。
+> 移动端（Android & iOS）19 项跨语言契约、Pillow 重采样 SHA-256 与界面单测位于 `mobile/test/`（运行 `cd mobile && flutter test`）。

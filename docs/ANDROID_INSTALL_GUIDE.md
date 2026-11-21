@@ -1,10 +1,10 @@
 # 🤖 Android 安卓零元直装与 06:30 隔夜防杀保活教程
 
-> **无需电脑 · 无需 Root · 无需付费签名 · 永久有效直接安装**
+> **🏆 手机端首选主力版本 · 无需电脑 · 无需 Root · 无需付费签名 · 永久有效直接安装**
 >
 > 适用机型：运行 **Android 7.0 及以上（ARM64 / 64 位）** 的主流安卓与鸿蒙手机（已在 Android 14 / vivo OriginOS 4 等真机实测全流程通过）。
 >
-> 相关文档：[📱 手机独立版 README](../mobile/README.md) · [🍎 iOS 零元安装教程](IOS_INSTALL_GUIDE.md) · [🛠️ 移动端编译指南](MOBILE_GUIDE.md) · [⬅️ 返回主 README](../README.md)
+> 相关文档：[📘 全平台快速上手](QUICKSTART.md) · [📱 手机独立版全览](../mobile/README.md) · [🍎 iOS 零元安装教程](IOS_INSTALL_GUIDE.md) · [🛠️ 移动端架构与构建](MOBILE_GUIDE.md) · [⬅️ 返回主 README](../README.md)
 
 ---
 
@@ -12,7 +12,7 @@
 
 本项目为免费开源工具，未上架商业应用商店，因此直接提供标准的**独立离线 `.apk` 安装包**：
 
-- **安装包下载**：前往 [GitHub Releases 最新版本](https://github.com/xunrana/LNU-LibSeat-Automation/releases/latest) 下载 **`LNU-LibSeat-Android-arm64.apk`**（约 `165.9 MB`，已离线内置全部 5 个原版无损 ONNX 验证码识别模型，本地运行 `python build_android.py` 产出的 `dist/辽宁大学图书馆座位预约.apk` 为同一二进制包）。
+- **安装包下载**：前往 [GitHub Releases 最新版本](https://github.com/XUNRANA/LNU-LibSeat-Automation/releases/latest) 下载 **`LNU-LibSeat-Android-arm64.apk`**（约 `165.9 MB`，已离线内置全部 5 个原版无损 ONNX 验证码识别模型，本地运行 `python build_android.py` 产出的 `dist/辽宁大学图书馆座位预约.apk` 为同一二进制包）。
 - **零限制永久使用**：与 iOS 免费自签 7 天需续签不同，Android `.apk` 装好即可**永久使用**；后续发布新版时直接覆盖安装即可，**学号、偏好、自习方案与宝藏座笔记全部保留**。
 - **为什么安装时手机可能提示「未知来源 / 未备案 / 风险应用」？**
   开源独立打包的 APK 未花钱在各大应用商店商业备案，国产系统（鸿蒙纯净模式、澎湃安全检测、OriginOS 安全提醒、ColorOS 安全扫描）会统一弹出例行提醒。本仓库 100% 源码公开透明，选择 **「继续安装 / 了解风险并安装」** 即可。
@@ -22,7 +22,7 @@
 ## 🛠️ 分步安装教程
 
 1. **下载安装包**
-   - 在手机浏览器打开 [GitHub Releases 最新版本](https://github.com/xunrana/LNU-LibSeat-Automation/releases/latest)，点击下载 **`LNU-LibSeat-Android-arm64.apk`**（也可先在电脑下载后传到手机微信/QQ/文件管理）。
+   - 在手机浏览器打开 [GitHub Releases 最新版本](https://github.com/XUNRANA/LNU-LibSeat-Automation/releases/latest)，点击下载 **`LNU-LibSeat-Android-arm64.apk`**（也可先在电脑下载后传到手机微信/QQ/文件管理）。
    - *提示*：若微信接收后文件名被自动追加 `.1` 后缀（如 `LNU-LibSeat-Android-arm64.apk.1`），在文件管理器里重命名去掉 `.1` 后再点击安装，或选择「用其他应用打开 → 软件包安装程序」。
 2. **允许安装未知来源应用**
    - 点击 `.apk` 开始安装；若系统提示「不允许安装来自此来源的应用」，点击 **去设置 → 打开「允许来自此来源的应用」** 后返回继续安装。

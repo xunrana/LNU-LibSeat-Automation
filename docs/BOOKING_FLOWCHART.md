@@ -1,6 +1,11 @@
-﻿# 抢座完整流程图
+﻿# 抢座完整流程图（v5 历史归档）
 
-> 📦 适用于 **LNU-LibSeat v5.0.0**
+> [!CAUTION]
+> 📜 **本文为 v5.0.0 Selenium 浏览器版本的历史流程图归档，不再反映现行代码。**
+> v6.0.0 已彻底移除浏览器与 Selenium，全面转向纯 HTTP API 引擎并推出 Android & iOS 手机独立版。
+> 请查阅现行文档：**[🏗️ v6 全仓架构与纯 API 时序图](ARCHITECTURE.md)** · **[📘 全平台快速上手](QUICKSTART.md)** · **[📦 v6.0.0 发布说明](RELEASE_NOTES_V6.md)**。
+
+> 📦 历史适用版本：**LNU-LibSeat v5.0.0**
 
 [← 返回 README](../README.md) ·
 [架构文档](ARCHITECTURE.md) ·

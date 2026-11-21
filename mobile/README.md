@@ -11,16 +11,16 @@
 
 <h1 align="left">LNU-LibSeat Mobile</h1>
 
-<h3 align="left">📱 辽宁大学图书馆 · 智能抢座神器 · 手机独立版</h3>
+<h3 align="left">📱 辽宁大学图书馆 · 智能抢座神器 · 手机独立版（主推 Android · 同步支持 iOS）</h3>
 
-<p align="left"><strong>100% 脱离电脑 · 零服务器成本 · 纯 HTTP API 毫秒级直连 · 端侧原版无损 ONNX 识图</strong></p>
+<p align="left"><strong>100% 脱离电脑 · 零服务器成本 · 纯 HTTP API 毫秒级直连 · 端侧 5 个原版无损 ONNX 识图</strong></p>
 
 <p align="left">
+<a href="../docs/ANDROID_INSTALL_GUIDE.md"><img src="https://img.shields.io/badge/Android-主推%20ARM64%20APK-3DDC84?logo=android&logoColor=white" alt="Android"></a>
+<a href="../docs/IOS_INSTALL_GUIDE.md"><img src="https://img.shields.io/badge/iOS-15.0%2B%20IPA-000000?logo=apple&logoColor=white" alt="iOS"></a>
 <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-3.x-02569B?logo=flutter&logoColor=white" alt="Flutter"></a>
-<a href="#-安装指南android--ios-0-元免费"><img src="https://img.shields.io/badge/Android-ARM64%20APK-3DDC84?logo=android&logoColor=white" alt="Android"></a>
-<a href="#-安装指南android--ios-0-元免费"><img src="https://img.shields.io/badge/iOS-15.0%2B%20IPA-000000?logo=apple&logoColor=white" alt="iOS"></a>
-<a href="https://onnxruntime.ai/"><img src="https://img.shields.io/badge/ONNX%20Runtime-5%20Models%20FP32-005CED?logo=onnx&logoColor=white" alt="ONNX"></a>
-<a href="../README.md"><img src="https://img.shields.io/badge/Desktop%20Edition-PC%20%2F%20Mac-indigo" alt="Desktop"></a>
+<a href="https://onnxruntime.ai/"><img src="https://img.shields.io/badge/ONNX%20Runtime-5%20Models%20Lossless-005CED?logo=onnx&logoColor=white" alt="ONNX"></a>
+<a href="../README.md"><img src="https://img.shields.io/badge/Desktop%20Edition-Win%20%2F%20Mac-indigo" alt="Desktop"></a>
 <a href="#-免责声明"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License"></a>
 </p>
 
@@ -42,14 +42,16 @@
 > [!IMPORTANT]
 > **手机端与桌面端（[电脑桌面版 README](../README.md)）核心协议、5 个 ONNX 验证码模型权重、图像预处理算子 100% 同源对齐**，无需搭建任何中转服务器，所有校园卡凭据均加密存储在系统安全库（Android Keystore / iOS Keychain）中，仅在手机本地直连 `libseat.lnu.edu.cn`。
 
+---
+
 > [!WARNING]
 > 🛡️ **请务必准时到馆刷卡签到！** 辽大图书馆规定 7 天内累计 **3 次违约将进入黑名单 7 天**。App 预约成功后会自动为你注册系统级防违约提醒，也请留意手机通知权限。
 
 ---
 
-## 🖼️ 实机界面一览（iOS / Android 同款界面）
+## 🖼️ 实机界面一览（Android / iOS 界面 1:1 通用）
 
-采用辽大专属**「辽大蓝 · 暖米纸底 · 崇山银杏金」**书卷视觉语言，覆盖「**晨约 · 寻座 · 入馆 · 我的**」四大核心频道：
+Android 与 iOS 共用同一套 Flutter 代码与界面设计（下示实机截图双端完全一致），采用辽大专属**「辽大蓝 · 暖米纸底 · 崇山银杏金」**书卷视觉语言，覆盖「**晨约 · 寻座 · 入馆 · 我的**」四大核心频道：
 
 <div align="center">
 
@@ -136,11 +138,11 @@
 
 ## 📦 安装指南（Android & iOS · 0 元免费）
 
-> 安装包均发布在仓库 [GitHub Releases](https://github.com/xunrana/LNU-LibSeat-Automation/releases/latest)（或自行通过下方开发者命令本地编译）。
+> 安装包均发布在仓库 [GitHub Releases](https://github.com/XUNRANA/LNU-LibSeat-Automation/releases/latest)（或自行通过下方开发者命令本地编译）。
 
-### 🤖 Android（安卓手机，0 元直装、永久生效）
-1. 前往 [GitHub Releases](https://github.com/xunrana/LNU-LibSeat-Automation/releases/latest) 下载 **`LNU-LibSeat-Android-arm64.apk`**（约 `165.9 MB`，ARM64 独立离线包，已内置全部 5 个无损 ONNX 模型；本地编译产物名为 `dist/辽宁大学图书馆座位预约.apk`）。
-2. 在手机上直接点击安装（若提示「未知来源应用 / 未备案风险提醒」，允许并继续安装即可；后续升级直接覆盖安装，不丢配置）。
+### 🤖 Android（安卓手机 · 🏆 主力推荐，0 元直装、永久生效）
+1. 前往 [GitHub Releases](https://github.com/XUNRANA/LNU-LibSeat-Automation/releases/latest) 下载 **`LNU-LibSeat-Android-arm64.apk`**（约 `165.9 MB`，ARM64 独立离线包，已内置全部 5 个无损 ONNX 模型；本地编译产物名为 `dist/辽宁大学图书馆座位预约.apk`）。
+2. 在手机上直接点击安装（若提示「未知来源应用 / 未备案风险提醒」，允许并继续安装即可；后续升级直接覆盖安装，不丢配置，**无 7 天过期限制**）。
 3. 首次打开后，强烈建议立即进入 **「我的 ▸ 晨约守夜与后台保活」** 点亮 4 项体检开关，并对照品牌完成一次性防锁屏冻结设置，详细分品牌图文步骤见 👉 **[🤖 Android 直装与 06:30 隔夜保活教程](../docs/ANDROID_INSTALL_GUIDE.md)**。
 
 ### 🍎 iPhone / iPad（iOS 15.0+，无需越狱、无需付费账号）
@@ -199,17 +201,16 @@
 
 ---
 
-## ⚖️ 三端能力对比（电脑桌面端 vs Android vs iOS）
+## ⚖️ 四端能力对比（Android / Windows 主力 · iOS / macOS 同步支持）
 
-| 能力维度 | 💻 电脑桌面版 | 🤖 Android 独立版 | 🍎 iOS 独立版 |
-| :--- | :--- | :--- | :--- |
-| **抢座核心协议与速度** | 纯 HTTP API（~0.55s） | ✅ 完全一致 | ✅ 完全一致 |
-| **5 个 ONNX 验证码模型** | 原版无损 FP32 / INT8 | ✅ 完全一致（原生 CPU `BitmapFactory`） | ✅ 完全一致（原生 CPU `ImageIO`） |
-| **验证码识别成功率** | 基准精度 | ✅ 基本 100% 一致 | ✅ 基本 100% 一致 |
-| **实时余座雷达 & 可视化选座** | 侧栏配置为主 | ✅ 全馆 21 室雷达 + 单室网格一键约 | ✅ 全馆 21 室雷达 + 单室网格一键约 |
-| **签到防违约本地提醒** | 邮件 / Webhook | ✅ 系统闹钟（锁屏/划后台准时弹） | ✅ 系统时效通知（锁屏/划后台准时弹） |
-| **06:30 过夜准点抢座** | 最稳（防休眠挂机） | 前台服务 + 精确闹钟（需电池白名单） | 锁屏静音保活 / 银杏夜守（插电过夜） |
-| **安装成本与方式** | 解压即用（Win/Mac） | 0 元直接装 `.apk` | 0 元自签 `.ipa`（7 天续签 / 巨魔永久） |
+| 能力维度 | 🤖 Android 独立版（🏆 主力） | 🪟 Windows 桌面版（🏆 主力） | 🍎 iOS 独立版 | 💻 macOS 桌面版 |
+| :--- | :--- | :--- | :--- | :--- |
+| **抢座核心协议与速度** | 纯 HTTP API（~0.55s） | ✅ 完全一致 | ✅ 完全一致 | ✅ 完全一致 |
+| **5 个 ONNX 验证码模型** | 原版无损（CPU `BitmapFactory`） | 原版无损（`ddddocr_lite` + 4 点选） | 原版无损（CPU `ImageIO`） | 与 Windows 完全一致 |
+| **实时余座雷达 & 选座网格** | ✅ 21 室雷达 + 单室直订 + 笔记 | 配置表单 + 实时空座直击 | ✅ 与 Android 1:1 通用 | 与 Windows 完全一致 |
+| **签到防违约提醒** | ✅ 系统闹钟（划掉后台准时弹） | 邮件 + 7 类 Webhook | ✅ 系统时效通知（划后台准时弹） | 邮件 + 7 类 Webhook |
+| **06:30 过夜准点抢座** | 5 重防杀 + Android 14 全屏解冻 / 银杏夜守 | 自动防休眠挂机 / 任务计划唤醒 | 锁屏静音保活 / 银杏夜守 | `caffeinate` 自动防休眠 |
+| **安装成本与方式** | **0 元直装 `.apk`（永久有效）** | **解压双击 `.exe`（204.6 MB）** | 0 元自签 `.ipa`（7 天续签 / 巨魔永久） | 右键 `.command` 首启（193.6 MB） |
 
 ---
 
@@ -278,6 +279,6 @@ flutter test
 
 <div align="center">
 
-[⬅️ 返回仓库主 README（电脑桌面版）](../README.md) · [🤖 Android 直装与保活教程](../docs/ANDROID_INSTALL_GUIDE.md) · [🍎 iOS 保姆级安装教程](../docs/IOS_INSTALL_GUIDE.md) · [🛠️ 移动端编译说明](../docs/MOBILE_GUIDE.md) · [🐛 反馈问题](https://github.com/xunrana/LNU-LibSeat-Automation/issues)
+[⬅️ 返回仓库主 README](../README.md) · [📘 全平台快速上手](../docs/QUICKSTART.md) · [🤖 Android 直装与保活教程](../docs/ANDROID_INSTALL_GUIDE.md) · [🍎 iOS 零元安装教程](../docs/IOS_INSTALL_GUIDE.md) · [🛠️ 移动端架构与构建](../docs/MOBILE_GUIDE.md) · [🐛 反馈问题](https://github.com/XUNRANA/LNU-LibSeat-Automation/issues)
 
 </div>

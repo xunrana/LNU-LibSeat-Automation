@@ -14,7 +14,7 @@
 </div>
 
 > [!IMPORTANT]
-> 📜 **这是 v3.0.0 的历史 Release Notes**。v5.0.0 已对验证码引擎做了完全重构（移除图鉴 API，改用本地 YOLO4+Siamese）；部分 v3 功能在 v5 中有变更（如座位号不再允许留空）。最新版本信息请参阅 [RELEASE_NOTES_V5.md](RELEASE_NOTES_V5.md)。
+> 📜 **这是 v3.0.0 的历史 Release Notes**。项目现已演进至 **v6.0.0（纯 HTTP API 全平台引擎，彻底移除浏览器依赖并推出 Android & iOS 手机独立版）**。最新版本信息请参阅 **[📦 v6.0.0 发布说明](RELEASE_NOTES_V6.md)** 与 **[📘 全平台快速上手](QUICKSTART.md)**。
 
 ---
 

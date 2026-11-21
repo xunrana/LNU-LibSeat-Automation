@@ -1,6 +1,6 @@
-# LibSeat 纯 API 协议契约（Phase 0 实测核验）
+# LibSeat 纯 API 协议契约（桌面端 & 移动端共用）
 
-> 本契约由真实浏览器 HAR 抓包与公开前端包分析整理，**已移除所有个人学号、密码、Token 与 Cookie**，作为 `core/protocol.py`、`core/api_crypto.py`、`core/libseat_client.py` 的唯一权威参考。
+> 本契约由真实浏览器 HAR 抓包与公开前端包分析整理，**已移除所有个人学号、密码、Token 与 Cookie**，作为桌面端 Python（`core/protocol.py`、`core/api_crypto.py`、`core/libseat_client.py`）与移动端 Flutter（`mobile/lib/core/protocol.dart`、`api_crypto.dart`、`libseat_client.dart`）共同遵循的唯一权威参考，并由 `scripts/dump_test_vectors.py` 与 `mobile/test/` 跨语言黄金测试向量强制锁定一致。
 
 ---
 
@@ -104,6 +104,11 @@
   - 失败响应：`{"status": "fail", "message": "<中文业务原因>", "code": "..."}`
 - **取消预约**：**`GET /rest/v2/cancel/{reservationId}?id={reservationId}&token=<48位>`**
   - 成功响应：`{"status": "success", "data": {"totalCancelled": 2, "allowedCancel": 3}, "code": "0"}`
+
+### 3.8 辅助信息端点（协议常量已收录，主要用于手机端入馆/寻座频道）
+- **馆方公告**：`GET /rest/v2/announce`（`EP_ANNOUNCE`）
+- **历史预约记录**：`GET /rest/v2/history/{page}/{pageSize}`（`EP_HISTORY`，支撑移动端「辽大自习书简」）
+- **楼层与可用座补充接口**：`GET /rest/v2/room/floors/{buildingId}`（`EP_ROOM_FLOORS`）、`GET /rest/v2/availSeats`（`EP_AVAIL_SEATS`）、`GET /rest/v2/settings`（`EP_SETTINGS`）
 
 ---
 

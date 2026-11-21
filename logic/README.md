@@ -1,6 +1,6 @@
 # logic/ — 纯 API 业务编排层
 
-抢座核心调度与业务逻辑，零 Selenium / 零 GUI 依赖，可同时驱动 CLI、PySide6 桌面端及后续 Web 控制面板。
+抢座核心调度与业务逻辑，零 Selenium / 零 GUI 依赖，驱动桌面 CLI 与 PySide6 GUI，并与移动端 `mobile/lib/logic/` 保持协议和策略语义 1:1 对齐。
 
 | 文件 | 职责 |
 |---|---|

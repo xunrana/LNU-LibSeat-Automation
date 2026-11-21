@@ -4,7 +4,10 @@
 >
 > 适用机型：运行 **iOS 15.0 及以上** 的所有 iPhone / iPad（已在 iPhone 17 / iOS 27 真机全流程实测通过）。
 >
-> 相关文档：[📱 手机独立版 README](../mobile/README.md) · [🛠️ 移动端编译指南](MOBILE_GUIDE.md) · [⬅️ 返回主 README](../README.md)
+> 相关文档：[🤖 Android 主力直装教程](ANDROID_INSTALL_GUIDE.md) · [📘 全平台快速上手](QUICKSTART.md) · [📱 手机独立版全览](../mobile/README.md) · [🛠️ 移动端架构与构建](MOBILE_GUIDE.md) · [⬅️ 返回主 README](../README.md)
+
+> [!TIP]
+> **如果你同时有 Android 手机或 Windows 电脑**：推荐优先使用 **[Android 版](ANDROID_INSTALL_GUIDE.md)**（0 元直装、永久免 7 天续签）或 **[Windows 桌面版](QUICKSTART.md)**；若以 iPhone 为主力，按下方教程几分钟即可完成 0 元安装，功能与界面与 Android 版 1:1 完全一致！
 
 ---
 
@@ -12,7 +15,7 @@
 
 本项目为免费开源工具，未上架 App Store（免去每年 99 美元开发者年费与审核限制），因此提供标准的**免签名 `.ipa` 安装包**：
 
-- **安装包下载**：前往 [GitHub Releases 最新版本](https://github.com/xunrana/LNU-LibSeat-Automation/releases/latest) 下载 **`LNU-LibSeat-iOS-arm64-unsigned.ipa`**（约 147 MB，已离线内置全部 5 个无损 ONNX 验证码识别模型）。
+- **安装包下载**：前往 [GitHub Releases 最新版本](https://github.com/XUNRANA/LNU-LibSeat-Automation/releases/latest) 下载 **`LNU-LibSeat-iOS-arm64-unsigned.ipa`**（约 147 MB，已离线内置全部 5 个无损 ONNX 验证码识别模型）。
 - **为什么需要签名？** 苹果要求装进 iPhone 的所有 App 都必须带有签名证书。使用你自己的**普通免费 Apple ID** 即可免费签发个人开发证书（**0 元**）。
 - **免费自签的正常限制**：
   1. **每 7 天需要续签一次**（到期前用工具原位覆盖重签，**学号、偏好、自习方案等本地数据不会丢失**；用 SideStore 可实现手机端无线自动续签）；

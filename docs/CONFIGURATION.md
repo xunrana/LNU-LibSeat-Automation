@@ -1,16 +1,19 @@
-# ⚙️ 配置详解 (`config.py`)
+# ⚙️ 桌面端配置详解 (`config.py`)
 
-> 📦 适用于 **LNU-LibSeat v6.0.0**（纯 API 引擎，无需浏览器配置）
+> 📦 适用于 **LNU-LibSeat v6.0.0 桌面端（Windows 主力 / macOS）**（纯 API 引擎，无需浏览器配置）
+>
+> 📱 *Android / iOS 手机独立版用户全部在 App 内图形化配置，无需手动编辑本文件（见 [Android 直装与保活教程](ANDROID_INSTALL_GUIDE.md) · [手机版功能全览](../mobile/README.md)）。*
 
 > [!IMPORTANT]
 > **推荐使用 GUI 界面配置**——双击 `LNU-LibSeat.exe`（macOS 双击 `LNU-LibSeat.app`）填表即可自动生成 `config.py`。
 > 老用户沿用 v5 `config.py` 时，已废弃的 `BROWSER` / `DRIVER_PATH` / `WEBDRIVER_CACHE` 字段会被自动静默忽略。
 
 [← 返回 README](../README.md) ·
-[快速上手](QUICKSTART.md) ·
-[架构文档](ARCHITECTURE.md) ·
-[v6.0.0 发布说明](RELEASE_NOTES_V6.md) ·
-[v5 → v6 升级指南](MIGRATION_V5_TO_V6.md)
+[📘 全平台快速上手](QUICKSTART.md) ·
+[🤖 Android 直装教程](ANDROID_INSTALL_GUIDE.md) ·
+[🏗️ 架构文档](ARCHITECTURE.md) ·
+[📦 v6.0.0 发布说明](RELEASE_NOTES_V6.md) ·
+[🚀 v5 → v6 升级指南](MIGRATION_V5_TO_V6.md)
 
 ---
 

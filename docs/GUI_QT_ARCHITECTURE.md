@@ -1,13 +1,14 @@
 <div align="center">
 
-# 🎨 GUI 架构文档
+# 🎨 桌面端 GUI 架构文档
 
-### LNU-LibSeat v5.0.0 — PySide6 模块化界面
+### LNU-LibSeat v6.0.0 — PySide6-Essentials 模块化界面（Windows 主力 · macOS）
 
 [← 返回 README](../README.md) ·
-[架构文档](ARCHITECTURE.md) ·
-[v5.0.0 升级日志](RELEASE_NOTES_V5.md) ·
-[数字参数](NUMERIC_PARAMETERS.md)
+[全仓架构文档](ARCHITECTURE.md) ·
+[配置详解](CONFIGURATION.md) ·
+[数字参数清单](NUMERIC_PARAMETERS.md) ·
+[v6.0.0 发布说明](RELEASE_NOTES_V6.md)
 
 </div>
 
@@ -15,416 +16,145 @@
 
 ## 📑 目录
 
-- [为什么从 CustomTkinter → PySide6](#-为什么从-customtkinter--pyside6)
 - [整体目录结构](#-整体目录结构)
 - [主题系统](#-主题系统)
 - [Panel 拆分](#-panel-拆分)
-- [Widgets 清单](#-widgets-清单)
 - [Worker 线程模型](#-worker-线程模型)
 - [Config I/O 服务](#-config-io-服务)
 - [防休眠服务](#-防休眠服务)
-- [打包注意事项](#-打包注意事项)
-- [自定义贡献指南](#-自定义贡献指南)
-
----
-
-## 🔄 为什么从 CustomTkinter → PySide6
-
-| 痛点（v3 CustomTkinter） | v5 PySide6 解决 |
-|---|---|
-| 高分屏 / 多显示器渲染不一致 | Qt 原生 HiDPI 支持 |
-| 1135 行单文件难维护 | 模块化拆成 23 个 .py 文件 |
-| 自定义控件能力有限 | QPainter 自绘 + QSS 样式 |
-| 信号传递靠回调链 | Qt 信号槽机制 |
-| 任务栏图标 / 系统集成弱 | Qt 原生支持 |
-
-> v3 时代 `gui.py`（1135 行）已经成为单点维护瓶颈。v5 重构后单文件最多 ~300 行，分层清晰。
+- [精简打包策略（瘦身 400MB+）](#-精简打包策略瘦身-400mb)
+- [扩展开发指南](#-扩展开发指南)
 
 ---
 
 ## 🗂️ 整体目录结构
 
-```
-ui_qt/                          # 23 个 .py 文件
+桌面端入口 `gui_qt.py` 仅委托 `ui_qt.app:main()` 启动主窗口，`ui_qt/` 按职责拆分为 `panels / widgets / workers / services`：
+
+```text
+ui_qt/
 ├── __init__.py
-├── app.py                       # 🏠 MainWindow 主窗口
-├── theme.py                     # 🎨 全局颜色 / 字体 / 间距常量
+├── app.py                       # 🏠 MainWindow 主窗口（无边框 + 防休眠联动 + 启停控制）
+├── theme.py                     # 🎨 全局配色（辽大蓝 / 暖米纸底 / 琥珀金）与字体工厂
 │
-├── panels/                      # 📋 左 + 右两大面板
-│   ├── __init__.py
-│   ├── config_panel.py          #   左：校区/自习室/座位/账号配置
-│   └── dashboard_panel.py       #   右：Logo/倒计时/启停/日志终端
+├── panels/                      # 📋 左右双面板
+│   ├── config_panel.py          #   左：目标（校区/自习室/首选座）/ 账号 / 邮箱与 Webhook / 执行模式
+│   └── dashboard_panel.py       #   右：校徽 / 自绘倒计时圆环 / 启停按钮 / 彩色 RUN LOG 终端
 │
-├── widgets/                     # 🧱 11 个复用组件
-│   ├── __init__.py
-│   ├── header_bar.py            #   顶部标题栏
-│   ├── title_bar.py             #   无边框窗口的自定义标题栏
-│   ├── account_card.py          #   账号卡片（学号+密码+时段）
+├── widgets/                     # 🧱 11 个可复用组件
+│   ├── header_bar.py            #   顶部状态栏
+│   ├── title_bar.py             #   无边框自定义窗口控制栏
+│   ├── account_card.py          #   单账号卡片（学号 / 密码显隐 / 起止时段）
 │   ├── section_card.py          #   通用分组卡片
-│   ├── mode_toggle.py           #   立即/定时模式切换
-│   ├── seat_grid.py             #   座位号网格选择
+│   ├── mode_toggle.py           #   立即 / 定时模式切换器
+│   ├── seat_grid.py             #   最多 10 个优先座位号输入网格（v6 可全留空）
 │   ├── status_pill.py           #   状态指示丸
-│   ├── countdown_ring.py        #   倒计时圆环（QPainter 自绘）
-│   ├── log_terminal.py          #   日志终端（彩色文本流）
-│   ├── buttons.py               #   主/次按钮
-│   └── seal_mark.py             #   学校封印装饰
+│   ├── countdown_ring.py        #   QPainter 自绘 360×360 倒计时圆环（~30fps）
+│   ├── log_terminal.py          #   终端风格实时彩色日志流
+│   ├── buttons.py               #   PrimaryButton / GhostButton
+│   └── seal_mark.py             #   校徽/封印装饰
 │
-├── workers/                     # 🧵 后台线程
-│   ├── __init__.py
-│   └── booker_worker.py         #   后台抢座 Worker（信号槽与 GUI 解耦）
+├── workers/                     # 🧵 后台纯 API 抢座线程
+│   └── booker_worker.py         #   QThread 驱动 main.main() → logic.orchestrator
 │
-└── services/                    # ⚙️ 系统服务封装
-    ├── __init__.py
-    ├── config_io.py             #   config.py 读写 + 数据模型
-    └── prevent_sleep.py         #   防休眠：Windows ExecutionState / macOS caffeinate
-```
-
-入口：`gui_qt.py` 仅 8 行，委托 `ui_qt.app:main()`：
-
-```python
-# gui_qt.py
-from ui_qt.app import main
-if __name__ == "__main__":
-    main()
+└── services/                    # ⚙️ 本地配置与系统电源服务
+    ├── config_io.py             #   GuiState / AccountState / ROOM_DATA + config.py 读写注入
+    └── prevent_sleep.py         #   Windows ExecutionState+心跳 / macOS caffeinate -dimsu
 ```
 
 ---
 
 ## 🎨 主题系统
 
-> 源码：`ui_qt/theme.py`
+源码：`ui_qt/theme.py`（与移动端 `mobile/lib/ui/theme/app_theme.dart` 共享「辽大蓝 · 暖米纸底 · 崇山银杏金」视觉体系）
 
-集中定义所有颜色、字体、间距，避免散落在各组件里。
-
-### 颜色常量（节选）
-
-```python
-class C:
-    # 纸感背景
-    BG          = "#f5f1e8"   # 米白
-    BG_PAPER    = "#faf6ec"   # 略亮纸
-
-    # 卡片
-    CARD        = "#fdfcf8"   # 蛋壳白
-    CARD_SUNK   = "#f0ead9"   # 内嵌区域底色
-    BORDER      = "#e8e2d3"   # 浅琥珀边
-
-    # 主色 LNU 海军蓝
-    INK         = "#003876"
-    INK_LIGHT   = "#1e5599"
-    INK_DARK    = "#002654"
-    INK_TINT    = "#e2eaf3"   # 极浅蓝（hover/selected 背景）
-
-    # 强调 琥珀
-    AMBER       = "#d4a574"
-    AMBER_HOT   = "#b8854a"
-    AMBER_LIGHT = "#e8c896"
-    AMBER_GLOW  = "#f5e2c4"
-
-    # 文字
-    TEXT        = "#1a1a1a"
-    TEXT_MUTED  = "#5a5a5a"
-    TEXT_DIM    = "#9a9a9a"
-    TEXT_INVERT = "#fdfcf8"
-
-    # 状态
-    OK          = "#5b8c5a"
-    WARN        = "#c8923c"
-    ERR         = "#9b3838"
-    ERR_LIGHT   = "#f0d8d8"
-```
-
-### 字体函数
-
-```python
-def serif(size: int) -> QFont:    # 衬线（标题）
-def sans(size: int) -> QFont:     # 无衬线（正文）
-def mono(size: int) -> QFont:     # 等宽（日志/代码）
-```
-
-### 修改主题
-
-想换主题色？修改 `theme.py` 中的常量即可——所有组件都引用 `C.AMBER` 等，不直接硬编码。
+- **核心色板（`C` 类）**：纸感背景 `BG = "#f5f1e8"`、卡片 `CARD = "#fdfcf8"`、辽大海军蓝 `INK = "#003876"`、琥珀强调 `AMBER = "#d4a574"`、状态色 `OK / WARN / ERR`。
+- **字体工厂**：`serif(size)`（衬线标题）、`sans(size)`（无衬线正文）、`mono(size)`（等宽时间与日志）。
 
 ---
 
 ## 📋 Panel 拆分
 
-主窗口（`ui_qt/app.py:MainWindow`）使用左右布局：
+主窗口（`ui_qt/app.py:MainWindow`）默认尺寸 `1400×920`（最小 `1100×760`，启动默认最大化），采用左 `45%`（`420–600px`）+ 右 `55%` 左右分栏布局：
 
-```
-┌─────────────────────────────────────┐
-│  HeaderBar (顶部)                    │
-├──────────────┬──────────────────────┤
-│              │                      │
-│ ConfigPanel  │  DashboardPanel      │
-│  (左 ~40%)   │   (右 ~60%)          │
-│              │                      │
-│ - 校区       │  - Logo + 圆环        │
-│ - 自习室     │  - 启停按钮           │
-│ - 座位       │  - 日志终端           │
-│ - 账号       │                      │
-│ - 模式       │                      │
-│              │                      │
-└──────────────┴──────────────────────┘
-```
+### 1. 左侧 `ConfigPanel`（`ui_qt/panels/config_panel.py`）
 
-### ConfigPanel（`ui_qt/panels/config_panel.py`）
+v6 **已彻底移除「浏览器选择」下拉框**，新增 **「手机推送 Webhook」** 输入框与纯 API 引擎状态提示，并允许首选座位留空：
 
-左侧配置面板，包含：
+| 分组卡片 | 控件 | 说明 |
+| :--- | :--- | :--- |
+| **🎯 目标设置** | `cb_campus` / `cb_room` / `SeatGrid` | 双校区 21 间自习室联动；优先座位可全留空（留空即实时扫当前空座） |
+| **👤 账号设置** | `AccountCard` × `MAX_ACCOUNTS (2)` + `chk_use_acc2` | 支持主副双号分时段无缝接力 |
+| **通知与推送** | `email_input` + `webhook_input` | 收件邮箱（免配 SMTP）+ 手机推送（自动识别 Bark / PushPlus / Server酱 / 企微 / 飞书 / 钉钉） |
+| **⚡ 执行设置** | `ModeToggle` + `sched_hour` / `sched_min` | 默认定时 `06:30`（北京时间），切换立即模式自动隐藏时间框；底部展示「⚡ 纯 API 直连引擎 · 无需安装浏览器或 WebDriver」 |
 
-| 区域 | 控件 |
-|------|------|
-| 校区选择 | `QComboBox` |
-| 自习室选择 | `QComboBox`（联动校区） |
-| 首选座位 | `SeatGrid` |
-| 主账号 | `AccountCard` |
-| 更多账号（可选） | `AccountCard` + 启用开关 |
-| 模式切换 | `ModeToggle`（立即/定时） |
-| 定时时间 | 时分输入框（仅定时模式可见） |
-| 邮件 | 邮箱输入框 |
-| 浏览器选择 | `QComboBox`（Chrome / Edge / Safari；macOS 默认 Chrome，Windows 默认 Edge） |
-
-### DashboardPanel（`ui_qt/panels/dashboard_panel.py`）
-
-右侧仪表盘：
-
-| 区域 | 控件 |
-|------|------|
-| Logo | `LogoImage`（圆形 logo） |
-| 倒计时 | `CountdownRing`（QPainter 自绘 360×360） |
-| 主按钮 | `PrimaryButton`（开始） |
-| 次按钮 | `GhostButton`（停止） |
-| 日志终端 | `LogTerminal`（实时滚动） |
-
----
-
-## 🧱 Widgets 清单
-
-| 组件 | 文件 | 关键技术 |
-|------|------|---------|
-| **HeaderBar** | `widgets/header_bar.py` | 顶部标题栏 + 应用名 |
-| **TitleBar** | `widgets/title_bar.py` | 无边框窗口的最小化/最大化/关闭按钮 |
-| **AccountCard** | `widgets/account_card.py` | 账号卡片（学号 + 密码 + 时段） |
-| **SectionCard** | `widgets/section_card.py` | 通用分组卡片（带标题） |
-| **ModeToggle** | `widgets/mode_toggle.py` | 立即 / 定时模式切换开关 |
-| **SeatGrid** | `widgets/seat_grid.py` | 座位号网格 + 多选 |
-| **StatusPill** | `widgets/status_pill.py` | 状态指示丸（待启动 / 运行中 / 已停止 / 已成功） |
-| **CountdownRing** | `widgets/countdown_ring.py` | QPainter 自绘倒计时圆环（30fps 动画） |
-| **LogTerminal** | `widgets/log_terminal.py` | 终端样式日志输出（支持彩色 ANSI） |
-| **PrimaryButton / GhostButton** | `widgets/buttons.py` | 主 / 次按钮 |
-| **SealMark** | `widgets/seal_mark.py` | 学校封印装饰（仅视觉） |
-
-### CountdownRing 关键参数
-
-| 参数 | 值 | 位置 |
-|------|---|------|
-| 最小尺寸 | 360×360 | `countdown_ring.py:38` |
-| 渲染帧率 | 33 ms（~30fps） | `countdown_ring.py:52` |
-| 旋转相位增量 | 0.04 rad/tick | `countdown_ring.py:130` |
-| 脉冲相位增量 | 0.025 rad/tick | `countdown_ring.py:132` |
-| 外环半径比例 | 0.40 | `countdown_ring.py:145` |
-| 内环半径比例 | 0.32 | `countdown_ring.py:146` |
-| 大号字体 | 54pt | `countdown_ring.py:227` |
-| 小号字体 | 38pt | `countdown_ring.py:227` |
-
-完整参数清单见 [NUMERIC_PARAMETERS.md §十七、GUI 界面](NUMERIC_PARAMETERS.md)。
+### 2. 右侧 `DashboardPanel`（`ui_qt/panels/dashboard_panel.py`）
+- 顶部校徽与 `CountdownRing`（`360×360` QPainter 自绘圆环，33ms 刷新 ~30fps）
+- 主操作按钮（开始抢座）与次操作按钮（中止）
+- 底部 `LogTerminal`（实时接收 `core.logger.attach_gui_handler` 推送的 INFO 及以上日志流，运行期不再弹出任何浏览器窗口）
 
 ---
 
 ## 🧵 Worker 线程模型
 
-> 源码：`ui_qt/workers/booker_worker.py`
+源码：`ui_qt/workers/booker_worker.py`
 
-### 设计目标
-
-- GUI 线程**绝不阻塞**（Qt 规则）
-- 抢座主流程在后台 Worker 线程运行
-- Worker 通过**信号**向 GUI 推日志/状态
-
-### 信号槽
-
-```python
-class BookerWorker(QObject):
-    log_emitted   = Signal(str, str)  # (level, message)
-    status_changed = Signal(str)       # "idle" / "running" / "done"
-    finished      = Signal(int)        # 退出码
-
-    def run(self):
-        # 调用 main.main(stop_event=self._stop_event)
-        # 通过 logger handler 把日志 emit 到 GUI
+```text
+点击「开始抢座」
+  → 校验表单 & 写回 config.py（并注入内存 config 模块，含 SCHEDULE_HOUR/MINUTE）
+  → 启动 prevent_sleep.enable() 防休眠
+  → QThread 启动 BookerWorker.run()
+      → 调用 main.main(stop_event=self._stop_event)
+      → logic.orchestrator 异步预热 ONNX + 多账号纯 HTTP API 调度
+      → logger 经信号 log_emitted 实时回推 UI（绝不阻塞主线程）
+  → 抢座完成或点击「中止」（stop_event.set() 毫秒级唤醒等待并退出）
+  → worker.finished 恢复按钮状态 & prevent_sleep.disable()
+  → 延迟 1200ms (QTimer.singleShot) 刷新倒计时圆环状态
 ```
-
-### Worker 生命周期
-
-```
-GUI 点「开始」
-    ↓
-QThread + BookerWorker
-    ↓
-worker.run() → main.main() → 浏览器开抢
-    ↓ 各种 log_emitted / status_changed
-GUI 实时刷新
-    ↓
-抢成功 / Ctrl+C / 用户点停止
-    ↓
-worker.finished → GUI 收尾
-```
-
-### 停止机制
-
-GUI 点「停止」按钮 → 设置 `worker._stop_event.set()` → `main.py` 内所有 `wait_until()` / `stop_event.wait()` 立即返回 → 浏览器关闭。
-
-延迟刷新设计：`app.py:235` worker 结束后延迟 **1200ms** 刷新倒计时圆环（让用户看清最终状态）。
 
 ---
 
 ## ⚙️ Config I/O 服务
 
-> 源码：`ui_qt/services/config_io.py`
+源码：`ui_qt/services/config_io.py`
 
-### 职责
-
-1. 读写 `config.py`（用户外部覆盖文件）
-2. 定义数据模型：`AccountState`, `GuiState`
-3. 维护双校区自习室列表：`ROOM_DATA`
-
-### ROOM_DATA 结构
-
-```python
-ROOM_DATA = {
-    "崇山校区图书馆": [
-        "二楼书库北", "二楼书库南", "二楼背诵长廊",
-        "三楼智慧研修空间", "三楼理科书库",
-        "四楼北自习室", "四楼南自习室", "四楼自习室406",
-    ],  # 8 间
-    "蒲河校区图书馆": [
-        "三楼走廊", "4楼阅览室", "四楼走廊",
-        "5楼阅览室", "五楼走廊", "6楼阅览室", "六楼走廊",
-        "704", "706", "707", "708", "七楼走廊",
-        "智慧空间",  # ← v5 新增
-    ],  # 13 间
-}
-```
-
-### 写入策略
-
-- 用户点「开始」时，把 GUI 状态序列化为 Python 代码写入 `config.py`
-- `SCHEDULE_HOUR` / `SCHEDULE_MINUTE` 仅注入内存的 `config` 模块，**不写文件**（避免污染下次启动）
+- **数据模型**：`GuiState`（含 `campus / room / fallback_rooms / seats / accounts / email / webhook_url / api_base_url / api_fire_offset_ms / mode / sched_hour / sched_min`）与 `AccountState`。
+- **双校区 21 间自习室（`ROOM_DATA`）**：
+  - 蒲河校区（13 间）：三楼走廊、4楼阅览室、四楼走廊、5楼阅览室、五楼走廊、6楼阅览室、六楼走廊、704、706、707、708、七楼走廊、智慧空间；
+  - 崇山校区（8 间）：二楼书库北、二楼书库南、二楼背诵长廊、三楼智慧研修空间、三楼理科书库、四楼北自习室、四楼南自习室、四楼自习室406。
+- **向下兼容与无损透传**：
+  - 读取旧 v5 `config.py` 时自动静默忽略废弃字段（`BROWSER` / `DRIVER_PATH` / `WEBDRIVER_CACHE`）；
+  - 用户在 `config.py` 中手工配置的 `FALLBACK_ROOMS`、`API_BASE_URL`、`API_FIRE_OFFSET_MS` 会在 GUI 读写时完整保留不丢失；
+  - `SCHEDULE_HOUR` / `SCHEDULE_MINUTE` 在启动时注入内存 `config` 模块，不覆盖写死。
 
 ---
 
 ## 🛡️ 防休眠服务
 
-> 源码：`ui_qt/services/prevent_sleep.py`
+源码：`ui_qt/services/prevent_sleep.py`
 
-### Windows API 调用
-
-```python
-from ctypes import windll
-ES_CONTINUOUS       = 0x80000000
-ES_SYSTEM_REQUIRED  = 0x00000001
-ES_DISPLAY_REQUIRED = 0x00000002
-
-windll.kernel32.SetThreadExecutionState(
-    ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED
-)
-```
-
-### 心跳与鼠标抖动
-
-| 参数 | 值 | 位置 | 说明 |
-|------|---|------|------|
-| 心跳间隔 | 30 秒 | `prevent_sleep.py:25` | 每 30s 重新申请防休眠 |
-| 空闲阈值 | 60 秒 | `prevent_sleep.py:26` | 用户空闲超过 60s 触发 |
-| 鼠标抖动距离 | 1 px | `prevent_sleep.py:85` | 水平移动 1px 后立即恢复 |
-
-### 退出时还原
-
-GUI 关闭时调用 `SetThreadExecutionState(ES_CONTINUOUS)` 恢复默认休眠策略。
-
-### macOS（caffeinate）
-
-macOS 不用 `SetThreadExecutionState`，而是启动系统自带的 `caffeinate -dimsu` 子进程，阻止显示器 / 系统 / 磁盘休眠并保持用户活跃（`_enable_macos()`）；GUI 关闭时 `terminate()` 该子进程恢复常规休眠（`_disable_macos()`）。上面的**心跳定时器与鼠标抖动是 Windows 专属**，macOS 不需要。其它平台（Linux 等）`enable()` 直接返回 `False`（no-op）。
+| 平台 | 实现机制 | 关键参数 |
+| :--- | :--- | :--- |
+| **Windows（主力）** | `kernel32.SetThreadExecutionState(ES_CONTINUOUS \| ES_SYSTEM_REQUIRED \| ES_DISPLAY_REQUIRED)` + `QTimer` 心跳 + 闲置微抖动 `SendInput(+1px, -1px)` 绕过 S0ix Modern Standby | 心跳间隔 `30s`；用户空闲 `>= 60s` 触发 `1px` 抵消抖动；退出调用 `SetThreadExecutionState(ES_CONTINUOUS)` 还原 |
+| **macOS** | 启动系统自带子进程 `caffeinate -dimsu` 阻止显示器/系统/磁盘休眠 | 无需心跳与鼠标抖动；结束或关闭窗口时 `terminate()` 还原 |
 
 ---
 
-## 📦 打包注意事项
+## 📦 精简打包策略（瘦身 400MB+）
 
-> 源码：`build.py`
+源码：`build.py`（Windows） / `build_mac.py`（macOS）
 
-### PyInstaller 关键参数
+相比 v5（Windows `613 MB` / macOS `632 MB`），v6 在隔离虚拟环境中采用四项极限瘦身策略，产出体积降至 **Windows `204.6 MB` / macOS `193.6 MB`**：
 
-```python
-"--collect-all", "PySide6",      # 必须！否则 Qt plugins 丢失
-"--collect-all", "cv2",          # OpenCV 原生库
-"--collect-all", "numpy",        # numpy 原生库
-"--collect-all", "onnxruntime",  # ONNX runtime
-"--collect-all", "selenium",
-"--collect-all", "ddddocr",
-"--windowed",                    # GUI 模式无黑框
-"--icon", "logo.ico",
-"--runtime-hook", "_runtime_hook.py",  # 设 cwd 让相对路径生效
-```
-
-### 排除大依赖
-
-```python
-"--exclude-module", "torch",         # 训练用，运行时不需要
-"--exclude-module", "torchvision",
-"--exclude-module", "timm",
-"--exclude-module", "tensorflow",
-# ...
-```
-
-### 模型权重拷贝
-
-```python
-# build.py:154-161
-shutil.copytree(
-    "core/checkpoints",
-    "dist/LNU-LibSeat-v5.0.0/_internal/core/checkpoints"
-)
-```
-
-这一步保证 ONNX 模型与 exe 一起分发。
+1. **仅安装 `PySide6-Essentials`**：显式排除 `QtWebEngine / QtPdf / QtQuick / Qt3D / QtMultimedia / QtCharts` 等 30+ 冗余 Qt 模块（立省 500MB+）；
+2. **彻底零 Selenium / 零 OpenCV**：`BUILD_DEPS` 仅含 `pyinstaller / PySide6-Essentials / numpy / onnxruntime / Pillow / requests / pycryptodome`；
+3. **精简 `ddddocr_lite/`**：仅从 `ddddocr` 提取 `common_old.onnx (13 MB)` + `charset_old.json`，丢弃未用到的 `common.onnx (52 MB)` 与 `common_det.onnx (19 MB)`；
+4. **严格过滤模型权重**：仅打包 `core/checkpoints/*.onnx`，排除所有 `.pt / .pth` 训练权重及未在运行期使用的 `logo.png`。
 
 ---
 
-## 🛠️ 自定义贡献指南
+## 🛠️ 扩展开发指南
 
-### 添加新组件
-
-1. 在 `ui_qt/widgets/` 下新建 `my_widget.py`
-2. 继承 `QWidget` 或现有组件
-3. 颜色 / 字体 / 间距统一引用 `theme.C` / `theme.serif()` 等
-4. 在 `panels/config_panel.py` 或 `dashboard_panel.py` 中实例化
-
-### 添加新面板
-
-1. 在 `ui_qt/panels/` 下新建 `my_panel.py`
-2. 实现一个 QWidget 子类
-3. 在 `ui_qt/app.py:MainWindow.__init__` 中加入主布局
-
-### 添加新服务
-
-1. 在 `ui_qt/services/` 下新建 `my_service.py`
-2. 在 `MainWindow` 或 `BookerWorker` 中注入
-
-### 主题魔改
-
-只改 `theme.py` 一个文件即可。
-
-> [!TIP]
-> 强烈建议保留现有主题色（琥珀 + 海军蓝 + 米白纸感）的对比度——这是经过设计师调整的高可读组合。
-
----
-
-## 🔗 相关文档
-
-- 📦 [v5.0.0 升级日志](RELEASE_NOTES_V5.md) — 三大重构整体概述
-- 🚀 [v3→v5 升级指南](MIGRATION_V3_TO_V5.md)
-- 🏗️ [架构文档](ARCHITECTURE.md) — 整体模块分层
-- 🧠 [验证码引擎](CAPTCHA_YOLO4_SIAMESE.md) — Worker 调用的核心
-- 🔢 [数字参数](NUMERIC_PARAMETERS.md) — GUI 尺寸 / 字体 / 帧率参数清单
-- ⚙️ [配置详解](CONFIGURATION.md) — Worker 读写的字段
+- **新增组件**：在 `ui_qt/widgets/` 新建 `QWidget` 子类，统一引用 `theme.C` / `theme.sans()` 等常量；
+- **修改配色**：只需调整 `ui_qt/theme.py` 中 `C` 类常量即可全界面生效；
+- **严禁耦合**：切勿在 `core/` 或 `logic/` 中导入 `PySide6`，以保证 `pytest tests/ -q` 无头纯离线测试始终畅通。

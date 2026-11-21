@@ -1,6 +1,10 @@
-# LNU-LibSeat v5.0.0 全自习室测试总结
+# LNU-LibSeat v5.0.0 全自习室测试总结（历史归档）
 
-> 📦 适用于 **LNU-LibSeat v5.0.0**
+> [!NOTE]
+> 📜 **本文为 v5.0.0 阶段的模型实测历史档案**，保留供研究 Click1/Click3 早期准确率基线参考。
+> 现行 v6.0.0 已转向纯 HTTP API 引擎与全平台（Android / Windows / iOS / macOS）架构，并配备 92 项 Python + 19 项 Flutter 离线单元测试，详见 **[📦 v6.0.0 发布说明](RELEASE_NOTES_V6.md)** 与 **[🧠 验证码识别引擎](CAPTCHA_YOLO4_SIAMESE.md)**。
+
+> 📦 历史适用版本：**LNU-LibSeat v5.0.0**
 > 本文档收集 v5 模型在真实抢座环境下的表现数据，并保留 v5.0.0-alpha/beta baseline 作对比参考。
 
 [← 返回 README](../README.md) ·

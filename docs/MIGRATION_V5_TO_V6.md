@@ -26,10 +26,12 @@
 
 ---
 
-## 🟢 EXE / macOS App 用户升级（推荐，2 分钟）
+## 🟢 Windows / macOS 桌面用户升级（推荐，2 分钟）
+
+> 💡 **顺带一提**：如果你有 **Android 手机** 且不想再开电脑挂机，v6 现已同步推出 **[🤖 Android 手机独立版（0 元直装、永久免续签）](ANDROID_INSTALL_GUIDE.md)**，100% 脱离电脑运行！（iPhone 用户见 [iOS 安装教程](IOS_INSTALL_GUIDE.md)）
 
 1. **备份旧 `config.py`**（含你的学号密码和首选座）。
-2. 前往 [Releases](https://github.com/XUNRANA/LNU-LibSeat-Automation/releases/latest) 下载 `LNU-LibSeat-v6.0.0-Windows-x86_64.zip`（macOS 下载 `LNU-LibSeat-v6.0.0-macOS-arm64.zip`），解压到**新目录**。
+2. 前往 [Releases](https://github.com/XUNRANA/LNU-LibSeat-Automation/releases/latest) 下载 **`LNU-LibSeat-v6.0.0-Windows-x86_64.zip`**（`204.6 MB`，较 v5 瘦身 408MB+；macOS 下载 `LNU-LibSeat-v6.0.0-macOS-arm64.zip`，`193.6 MB`），解压到**新目录**。
 3. 直接把旧 `config.py` 复制到新目录（与 `LNU-LibSeat.exe` / `.app` 同级）即可双击运行！
    - 旧配置里的 `BROWSER` / `DRIVER_PATH` / `WEBDRIVER_CACHE` 会被 **自动静默忽略**，不需要手动删除。
    - 下次点「开始抢座」时，GUI 会自动帮你重写为干净的 v6 格式 `config.py`。

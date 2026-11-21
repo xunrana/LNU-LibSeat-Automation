@@ -1,411 +1,184 @@
 <div align="center">
 
-# 🧠 验证码引擎：YOLO4 + Siamese
+# 🧠 验证码识别引擎：YOLOv8 + Siamese（桌面 & 移动同源）
 
-### LNU-LibSeat v5.0.0 自研本地识别管线
+### LNU-LibSeat v6.0.0 全平台纯端侧离线 ONNX 管线
 
 [← 返回 README](../README.md) ·
-[架构文档](ARCHITECTURE.md) ·
-[v5.0.0 升级日志](RELEASE_NOTES_V5.md) ·
-[数字参数](NUMERIC_PARAMETERS.md)
+[全仓架构文档](ARCHITECTURE.md) ·
+[纯 API 协议契约](API_PROTOCOL_CONTRACT.md) ·
+[移动端架构与构建](MOBILE_GUIDE.md) ·
+[数字参数清单](NUMERIC_PARAMETERS.md)
 
 </div>
 
 > [!NOTE]
-> 本文标题与文件名中的 **YOLO4** 仅为项目内部实验代号，**不代表检测器架构版本**。实际检测器是
-> [ultralytics **YOLOv8**](https://github.com/ultralytics/ultralytics)；历史命名（`yolo4` 模块名 /
-> ONNX 权重名 / 本文标题与小节锚点）沿用至今仅为兼容，不强制改名。
+> 本文文件名及部分源码文件名中的 **`yolo4`**（如 `core/captcha_yolo4_siamese.py`）仅为项目早期内部实验代号，**不代表检测器架构版本**。实际检测骨干为 [Ultralytics **YOLOv8**](https://github.com/ultralytics/ultralytics)，孪生相似度骨干为 **MobileNetV4-Conv-Medium**；沿用旧文件名仅为向后兼容。
 
 ---
 
 ## 📑 目录
 
-- [验证码类型](#-验证码类型)
-- [整体管线](#-整体管线)
-- [YOLO4 检测层](#-yolo4-检测层)
+- [两类验证码与全仓 5 模型清单](#-两类验证码与全仓-5-模型清单)
+- [v6 纯 API 全链路推理管线](#-v6-纯-api-全链路推理管线)
+- [三级自适应路由（告别硬时间窗）](#-三级自适应路由告别硬时间窗)
+- [YOLOv8 检测层](#-yolov8-检测层)
 - [Siamese 相似度层](#-siamese-相似度层)
-- [时间窗口机制](#-时间窗口机制)
-- [模型预加载](#-模型预加载)
-- [线程安全](#-线程安全)
-- [准确率与延迟](#-准确率与延迟)
-- [与 v3 引擎对比](#-与-v3-引擎对比)
-- [自训练流程](#-自训练流程)
+- [登录 4 位图形码（ddddocr_lite）](#-登录-4-位图形码ddddocr_lite)
+- [移动端零误差对齐（CPU 解码 + Pillow 定点重采样）](#-移动端零误差对齐cpu-解码--pillow-定点重采样)
+- [模型预热、线程安全与性能实测](#-模型预热线程安全与性能实测)
+- [自训练与替换模型](#-自训练与替换模型)
 - [故障排查](#-故障排查)
 
 ---
 
-## 🎯 验证码类型
+## 🎯 两类验证码与全仓 5 模型清单
 
-辽大图书馆预约系统使用两类点选验证码：
+辽大图书馆纯 API 流程涉及两类验证码，全部在本地由 **ONNX Runtime CPU** 离线求解，零云端打码费用：
 
-| 类型 | 名称 | 提示 | 输出 |
-|------|------|------|------|
-| **Click1** | 单字定位 | 「请点击图中的'X'」 | 1 个点击坐标 |
-| **Click3** | 3 点连击 | 「请按顺序点击图中：'X' '_' '_'」 | 3 个点击坐标（有顺序） |
+| 阶段 | 验证码类型 | 说明 | 运行时 ONNX 文件 | 精度 | 体积 |
+| :--- | :--- | :--- | :--- | :---: | :---: |
+| **登录** | 4 位图形文本码 | `GET /auth/createCaptcha`（160×70 PNG） | `common_old.onnx` (+ `charset_old.json`) | INT8 | `12.98 MiB` |
+| **预约（非高峰）** | **Click1** 单字点选 | `wordCheckCount == 1`，返回 1 个 `(x, y)` | `click1_yolo_plan_bg_char40_best.onnx` | FP32 | `11.70 MiB` |
+| **预约（非高峰）** | **Click1** 相似度匹配 | MobileNetV4 1×4 相似度 argmax | `click1_siamese_yolo4_best.onnx` | FP32 | `42.39 MiB` |
+| **预约（06:30 高峰）** | **Click3** 三字按序点选 | `wordCheckCount == 3`，返回 3 个有序 `(x, y)` | `click3_yolo_plan_bg_char60_best.onnx` | FP32 | `42.67 MiB` |
+| **预约（06:30 高峰）** | **Click3** 相似度匹配 | MobileNetV4 3×4 相似度全排列最优匹配 | `click3_siamese_yolo4_posw3_best.onnx` | FP32 | `42.39 MiB` |
 
-两类都由 YOLO4+Siamese 双阶段管线处理，**模型独立，结构相同**。
+- **桌面端位置**：点击 4 模型位于 `core/checkpoints/*.onnx`（共 `139.15 MiB`），登录 OCR 在发行包中位于 `_internal/ddddocr_lite/`（源码开发态直接读取已安装 `ddddocr` 包内文件，零 OpenCV 依赖）。
+- **移动端位置**：全部 5 个原版无损 ONNX 模型由 `scripts/prepare_mobile_assets.py` 导出至 `mobile/assets/models/`（共 **`159.52 MB` / `152.13 MiB`**，自动校验 `IR <= 8`、`Opset <= 18` 兼容移动版 ONNX Runtime 1.15.1）。
 
 ---
 
-## 🔄 整体管线
+## 🔄 v6 纯 API 全链路推理管线
+
+v6 已彻底移除浏览器 DOM 抓图与 Selenium `ActionChains` 模拟点击，直接处理接口原始图像字节流并 1:1 回传原生像素坐标：
 
 ```mermaid
 flowchart LR
-    A[DOM 抓图] --> B[base64 解码]
-    B --> C[YOLO4 检测]
-    C --> D{检测数 = 4?}
-    D -- 否 --> E[判定不可用<br/>刷新验证码]
-    D -- 是 --> F[Siamese 相似度]
-    F --> G[Top-K 排序]
-    G --> H[ActionChains 点击]
-    H --> I[JS 兜底补点]
-    I --> J[点确认按钮]
+    A["POST /cap/captcha/&lt;token&gt;<br/>330×160 bg + 70×36 target<br/>+ wordCheckCount (1 或 3)"] --> B["CaptchaService<br/>三级自适应路由"]
+    B --> C["拼合 plan + bg<br/>YOLOv8 640×640 检测"]
+    C --> D{"恰好检测到 4 个字框?"}
+    D -- "否" --> E["返回未命中<br/>退避并重新拉题"]
+    D -- "是" --> F["裁剪 60×60 候选字<br/>112×112 BICUBIC"]
+    F --> G["Siamese MobileNetV4<br/>计算相似度矩阵"]
+    G --> H["Click1: argmax 1 点<br/>Click3: 全排列最优 3 点"]
+    H --> I["GET /cap/checkCaptcha<br/>Base64 JSON 原生坐标"]
+    I --> J["POST /rest/v2/freeBook<br/>authid = cap_token"]
 ```
 
-### 关键代码位置
+### 关键代码位置（桌面 Python ↔ 移动 Dart 一一对应）
 
-| 阶段 | 文件 | 函数 |
-|------|------|------|
-| 抓图 | `logic/booker.py` | `_read_captcha_images()` |
-| 解码 + 检测 | `core/yolo_onnx.py` | `YoloOnnxPredictor.predict()` |
-| Click3 求解 | `core/captcha_yolo4_siamese.py` | `Yolo4SiameseSolver.solve()` |
-| Click1 求解 | `core/captcha_click1_yolo4_siamese.py` | `Click1Yolo4SiameseSolver.solve()` |
-| 点击执行 | `logic/booker.py` | `fire_captcha_blitz()` |
+| 阶段 | 桌面端（Python） | 移动端（Flutter / Dart） |
+| :--- | :--- | :--- |
+| 统一服务与路由 | `core/captcha_service.py` (`CaptchaService`) | `mobile/lib/core/captcha/captcha_service.dart` |
+| 独立后台推理线程 | `CaptchaService._lock` 共享单例 | `mobile/lib/core/captcha/onnx_worker.dart` (Isolate) |
+| YOLOv8 ONNX 检测 | `core/yolo_onnx.py` (`YoloOnnxPredictor`) | `mobile/lib/core/captcha/yolo_onnx.dart` |
+| Click1 / Click3 求解 | `core/captcha_click1_yolo4_siamese.py` / `core/captcha_yolo4_siamese.py` | `mobile/lib/core/captcha/siamese_onnx.dart` |
+| 登录 4 位 OCR | `core/captcha.py` (`_LiteOnnxOcr`) | `mobile/lib/core/captcha/ocr_login.dart` |
+| 诊断叠加图 | `core/session_recorder.py` (`save_captcha_diagnostic`) | `mobile/lib/core/session_recorder.dart` |
 
 ---
 
-## 🔍 YOLO4 检测层
+## 🧭 三级自适应路由（告别硬时间窗）
 
-> 源码：`core/yolo_onnx.py` + ONNX 模型
+> 与 v5 硬编码「仅 06:30–06:35 启用本地模型」不同，**v6 全天候 24 小时均可自动解 Click1 与 Click3 验证码**。
 
-### 模型路径
+源码：`core/captcha_service.py:detect_captcha_kind()`（与 Dart 端一致）按以下三级优先级判定题型：
 
-| 验证码 | ONNX 文件 | 输入尺寸 | 训练源 |
-|--------|-----------|----------|--------|
-| Click1 | `core/checkpoints/click1_yolo_plan_bg_char40_best.onnx` | 640×640 | `*.pt` |
-| Click3 | `core/checkpoints/click3_yolo_plan_bg_char60_best.onnx` | 640×640 | `*.pt` |
+1. **一级（最优先）：服务端显式字段 `wordCheckCount`**
+   - `/cap/captcha` 返回 `wordCheckCount == 3` → 路由 `click3`；`wordCheckCount == 1` → 路由 `click1`。
+2. **二级（图像特征兜底）：目标图槽位笔迹占空比**
+   - 将 `70×36` 目标图转灰度（`L`），检测 `y=[5:27]` 处左/中/右三个槽位（`x=[5:25], [25:45], [45:65]`）中灰度 `< 180` 的深色像素占比：
+   - 左右槽均 `>= 2%` → `click3`；
+   - 仅中槽 `>= 2%` 且左右槽均 `< 1%` → `click1`。
+3. **三级（最后兜底）：北京时间窗口**
+   - 前两级均无法判定时，北京时间 `06:30:00–06:35:00`（`RUSH_WINDOW_START/END`）走 `click3`，其余时段走 `click1`。
 
-### 推理参数
+---
 
-| 参数 | Click1 | Click3 | 位置 | 说明 |
-|------|--------|--------|------|------|
-| 输入尺寸 | 640 px | 640 px | `captcha_click1*:98` / `captcha_yolo4*:105` | YOLO 标准 |
-| 置信度阈值 | 0.05 | 0.05 | :99 / :106 | 低于则过滤 |
-| IoU 阈值 | 0.7 | 0.45 | :100 / :107 | NMS 去重 |
-| `top_k` | 4 | 4 | :103 / :110 | 保留最大候选数 |
-| 字符裁剪尺寸 | 60 px | 60 px | :104 / :111 | Siamese 输入裁剪边长 |
-| letterbox 填充 | 114 | 114 | `yolo_onnx.py:83` | YOLO 标准深灰 |
-| 最大检测数 | 300 | 300 | `yolo_onnx.py:44` | NMS 后保留上限 |
+## 🔍 YOLOv8 检测层
 
-### "恰好 4 个检测"硬门槛
+源码：`core/yolo_onnx.py` + `core/captcha_*_yolo4_siamese.py`
 
-```python
-# core/captcha_click1_yolo4_siamese.py:239
-if len(boxes) != 4:
-    return Click1SiameseResult(solved=False, ...)
-```
-
-如果 YOLO 检测数 ≠ 4 → 直接判定验证码不可用，刷新重试。
-
-这是为了避免：检测到 3 个时漏点 / 检测到 5+ 个时点错。
-
-> [!NOTE]
-> 这条规则会损失一定的准确率（实测损失约 15%），但保证**只要解了就高度正确**。
+| 参数 | Click1 | Click3 | 说明 |
+| :--- | :---: | :---: | :--- |
+| 模型输入尺寸 (`yolo_imgsz`) | `640×640` | `640×640` | Pillow `BILINEAR` 等比缩放 + 居中填充 |
+| letterbox 填充色 | `114` | `114` | YOLO 标准深灰 |
+| 置信度阈值 (`yolo_conf`) | `0.05` | `0.05` | 低于则过滤 |
+| NMS IoU 阈值 (`yolo_iou`) | `0.7` | `0.45` | 同类去重阈值 |
+| `max_det` | `300` | `300` | NMS 后保留上限 |
+| 候选数硬门槛 (`top_k`) | 必须 `== 4` | 必须 `== 4` | 检测数不为 4 直接放弃本图并刷新重取，宁缺毋滥 |
+| 候选裁剪边长 (`char_crop_size`) | `60 px` | `60 px` | 以框中心向外裁剪 60×60 区域送入 Siamese |
 
 ---
 
 ## 🧬 Siamese 相似度层
 
-### 模型路径
-
-| 验证码 | ONNX 文件 | 输入尺寸 | 训练源 |
-|--------|-----------|----------|--------|
-| Click1 | `core/checkpoints/click1_siamese_yolo4_best.onnx` | 112×112 | `*.pth`（无） |
-| Click3 | `core/checkpoints/click3_siamese_yolo4_posw3_best.onnx` | 112×112 | `*.pth` |
-
-### 工作流程
-
-```
-target 图（提示字符 4 个 / 1 个）
-    ↓ 各 crop 到 112×112
-candidate 框（YOLO 检测到的 4 个背景候选）
-    ↓ 各 crop 到 112×112
-   ↓
-Siamese 网络（孪生子网共享权重）
-    ↓ 输出 4×4 / 1×4 的相似度矩阵
-匈牙利匹配 / argmax
-    ↓
-最终点击坐标
-```
-
-### 网络结构（训练时）
-
-| 层 | 配置 | 位置 |
-|----|------|------|
-| Backbone | MobileNetV4-Conv-Medium | `model/siamese_model.py:27` |
-| 特征维度 | 1280 | `model/siamese_model.py:27` |
-| Dropout | 0.2 | `model/siamese_model.py:28` |
-| 融合头 | Linear: 5120→512→128→1 | `model/siamese_model.py:31-36` |
-
-### Click3 的额外约束
-
-```python
-# core/captcha_yolo4_siamese.py:278
-if matched_count < 3:
-    return Yolo4SiameseResult(solved=False, ...)
-```
-
-3 点必须**全部**匹配到候选，否则判失败。
+- **网络架构**：`SiameseMobileNetV4Embed`（骨干 `timm.mobilenetv4_conv_medium`，输入 `112×112` RGB，经 Pillow `BICUBIC` 等比缩放并居中填充灰度 `128`，像素归一化至 `[0, 1]`，CHW 排布）。
+- **推理匹配**：
+  - **Click1**：1 个目标字 × 4 个背景候选（batch=4）→ 取相似度 `argmax` 输出 1 个 `(x, y)` 整数坐标。
+  - **Click3**：3 个有序目标字 × 4 个背景候选（batch=12）→ 构造 `3×4` 相似度矩阵，在 `_optimal_match()` 中枚举全部 $P(4,3) = 24$ 种无重复排列求总分最高解，要求全部 3 点均有效匹配。
 
 ---
 
-## ⏰ 时间窗口机制
+## 🔤 登录 4 位图形码（`ddddocr_lite`）
 
-> v5.0.0 关键设计决策。源码：`logic/booker.py:LOCAL_CAPTCHA_WINDOW_START/END`
+源码：`core/captcha.py`（桌面） / `mobile/lib/core/captcha/ocr_login.dart`（移动）
 
-### 设定
-
-```python
-# logic/booker.py:38-39
-LOCAL_CAPTCHA_WINDOW_START = dt_time(6, 30, 0)   # 06:30:00
-LOCAL_CAPTCHA_WINDOW_END   = dt_time(6, 35, 0)   # 06:35:00
-```
-
-### 行为
-
-| 当前时间 | 行为 |
-|---------|------|
-| 06:30:00 – 06:35:00 | ✅ 加载模型 + 解析验证码 |
-| 其他时段 | ❌ `pre_solve_captcha()` 返回 `{"outside_model_window": True, "solved": False}` → 主循环立即换座 |
-
-### 为什么这么设计
-
-1. **CPU 节约**：YOLO + Siamese 推理 ~500ms，占满 1 个 CPU 核心；非抢座时段没必要
-2. **冷启动隔离**：保证抢座当下推理在已预热状态
-3. **避免无意义识别**：非高峰时段验证码失败的真实原因往往是「座位已被预约」，识别正确也没用
-
-### 错峰抢座怎么办？
-
-如果你抢的是非 06:30 时段（如错峰 14:00 放座），需要修改窗口：
-
-```python
-# logic/booker.py
-LOCAL_CAPTCHA_WINDOW_START = dt_time(14, 0, 0)
-LOCAL_CAPTCHA_WINDOW_END   = dt_time(14, 5, 0)
-```
-
-> [!WARNING]
-> 这是源码修改，exe 用户无法直接改。建议直接拉源码重新打包。
+- **纯 Pillow + ONNX，零 OpenCV**：将 160×70 登录图形码按 `target_height = 64` 等比 `LANCZOS` 缩放后转灰度（`L`），归一化 `/ 255.0` 送入 `common_old.onnx`，经 CTC Greedy 解码查 `charset_old.json` 输出 4 位验证码。
+- **体积优化**：桌面构建脚本（`build.py` / `build_mac.py`）仅提取 `common_old.onnx (13 MB) + charset_old.json`，剔除了未使用的 `common.onnx (52 MB)`、`common_det.onnx (19 MB)` 与整个 `opencv-python`。
 
 ---
 
-## 🧊 模型预加载
+## 📱 移动端零误差对齐（CPU 解码 + Pillow 定点重采样）
 
-> 源码：`main.py:31-51` `_start_captcha_model_preload`
+为保证 Android / iOS 手机端识别率与桌面端完全一致且**息屏锁屏无 GPU 依赖**：
 
-### 工作原理
-
-```python
-def _start_captcha_model_preload(reason: str = "scheduled") -> None:
-    """Start one background warmup for YOLO4+Siamese."""
-    global _CAPTCHA_PRELOAD_THREAD
-    if _CAPTCHA_PRELOAD_THREAD is not None and _CAPTCHA_PRELOAD_THREAD.is_alive():
-        return  # 已在跑，不重复启动
-
-    def _worker():
-        from logic.booker import preload_yolo4_siamese_model
-        preload_yolo4_siamese_model("preload")
-
-    _CAPTCHA_PRELOAD_THREAD = threading.Thread(
-        target=_worker, name="captcha-yolo4-siamese-preload", daemon=True,
-    )
-    _CAPTCHA_PRELOAD_THREAD.start()
-```
-
-### 触发时机
-
-| 入口 | 时机 |
-|------|------|
-| `main.py:main()` 定时模式 | 启动时立即触发（`_start_captcha_model_preload("scheduled startup")`） |
-| `main.py:main()` 立即模式 | 同上（`_start_captcha_model_preload("immediate startup")`） |
-| GUI 启动 | 通过 `BookerWorker` 间接触发 |
-
-### 收益
-
-- 模型加载（ONNX 解析 + opcache 编译）耗时约 **3-5s**
-- 不预加载 → 06:30 当下解第一个验证码会卡顿 → 错过提交窗口
-- 预加载后 → 06:30 解第一个验证码 < 1s
+1. **原生纯 CPU 解码**：
+   - Android (`MainActivity.kt:decodeImageRgbaCpu`)：`BitmapFactory.decodeByteArray`（`ARGB_8888`, `inScaled=false`, `inPremultiplied=false`），底层与 Pillow 同用 `libjpeg-turbo / libpng`；
+   - iOS (`AppDelegate.swift:decodeImageRgbaCpu`)：`ImageIO` + `CoreGraphics` 渲染到 8-bit sRGB `CGContext`。
+2. **Pillow 算子逐字节移植（`mobile/lib/core/captcha/pil_image_ops.dart`）**：
+   - 严格复现 Pillow 22-bit 定点系数与取整逻辑的 `BILINEAR`（YOLO）、`BICUBIC`（Siamese）、`LANCZOS`（登录 OCR）重采样，以及 ITU-R 601-2 灰度转换公式；
+   - 由 `scripts/dump_test_vectors.py` 生成黄金向量，`flutter test` 执行 **SHA-256 逐字节 0 误差校验**。
 
 ---
 
-## 🔒 线程安全
+## 🧊 模型预热、线程安全与性能实测
 
-> 源码：`logic/booker.py` 模块级全局
-
-### 全局状态
-
-```python
-# logic/booker.py
-_CAPTCHA_SOLVER_LOCK = threading.Lock()       # 模型加载锁
-_YOLO4_SIAMESE_PRELOADED = False              # 一次性标志
-```
-
-### 使用模式
-
-```python
-def preload_yolo4_siamese_model(reason: str = "manual"):
-    global _YOLO4_SIAMESE_PRELOADED
-    with _CAPTCHA_SOLVER_LOCK:
-        if _YOLO4_SIAMESE_PRELOADED:
-            return  # 已加载过，直接返回
-        # ... 加载 ONNX 模型 ...
-        _YOLO4_SIAMESE_PRELOADED = True
-```
-
-### 多账号场景
-
-| 场景 | 行为 |
-|------|------|
-| 账号 A 先到 06:29:30 触发解析 | 拿到锁，加载模型，标志置 True |
-| 账号 B 紧随 06:29:38（slot+8s）触发 | 拿到锁后发现标志已 True，直接返回 |
-| 同时触发（极端） | 串行加载，第二个等第一个完成 |
+- **异步预热**：桌面端 `logic/orchestrator.py:start_captcha_model_preload()` 在 GUI/CLI 启动时以守护线程预热 Click3 + Click1（约 2 秒）；移动端在独立 Isolate 预热，均避免 06:30 首次冷启动。
+- **线程安全**：桌面端由 `CaptchaService._lock` 保护双账号并发调用，仅共享一份 ONNX Runtime 上下文；移动端单 Isolate 串行排队，内存占用可控。
+- **实测性能**：
+  - 本地单次 Click1 推理：**~62 ms**（纯 CPU，全链路从锁定空座到 `freeBook` 下单实测 **0.55 s**）；
+  - Click1 测试集端到端一次准确率：**83.48%**（YOLO 覆盖率 100%，单座最多重试 8 次，累计通过率极高）。
 
 ---
 
-## 📊 准确率与延迟
+## 🧪 自训练与替换模型
 
-| 验证码 | 单次准确率 | 推理延迟（CPU） | 说明 |
-|--------|-----------|----------------|------|
-| **Click1** | **83.48%** | < 1s（预计） | 端到端实测数据来自测试集 |
-| **Click3** | 待回测 | < 1s（预计） | 需 3 点全对，难度更高 |
-
-> 完整性能数据见 [V5_PERFORMANCE.md](V5_PERFORMANCE.md)。
-
-### 实测局限性（来自 v5.0.0 开发阶段测试）
-
-| 因素 | 说明 |
-|------|------|
-| 「恰好 4 检测」硬门槛 | 损失约 15% 召回 |
-| Siamese 无置信度阈值 | argmax 硬选，低分场景误差大 |
-| 目标字符裁剪坐标硬编码 | 字号偏差敏感 |
-| YOLO bbox 偏移直接传导 | 检测框偏移 → 点击位置偏移 |
-
-详细分析见历史 [TEST_SUMMARY.md](TEST_SUMMARY.md)。
-
----
-
-## 🔬 与 v3 引擎对比
-
-| 维度 | v3 图鉴 API | v3 ddddocr | **v5 YOLO4+Siamese** |
-|------|-------------|------------|----------------------|
-| **类型** | 商业云端 API | 通用 OCR | 自研专用 |
-| **联网** | ✅ 强依赖 | ❌ 离线 | ❌ 离线 |
-| **延迟（平均）** | 7.21s | 0.51s | < 1s |
-| **延迟（范围）** | 3.5–17.8s | 0.32–0.65s | 待回测 |
-| **单次准确率** | 100% | 61.2% | Click1 83.48% |
-| **累计 5 次通过** | 100% | 100% | 待回测 |
-| **成本/次** | 0.016 元 | 0 | 0 |
-| **资源消耗** | 网络流量 | 极低 CPU | 中等 CPU（推理） |
-| **维护负担** | 商家维护 | 第三方维护 | 自维护（可重训） |
-
-**结论**：v5 用一次性 210MB 模型体积换取了**离线 + 零成本 + 可定制**。
-
----
-
-## 🧪 自训练流程
-
-> 适合：想用自己的数据集训练新模型替换默认权重。
-
-### 必备文件（仓库自带）
-
-- `model/siamese_dataloader.py` — 数据加载 + 数据增强
-- `model/siamese_model.py` — Siamese 网络定义
-
-### 训练参数（默认）
-
-| 参数 | 值 | 位置 |
-|------|---|------|
-| 特征维度 | 1280 | `model/siamese_model.py:27` |
-| Dropout | 0.2 | `model/siamese_model.py:28` |
-| 融合层 | 5120→512→128→1 | `model/siamese_model.py:31-36` |
-| 输入尺寸 | 112×112 | `model/siamese_dataloader.py:177` |
-| 训练/验证比 | 0.8 | `model/siamese_dataloader.py:70` |
-| 随机种子 | 42 | `model/siamese_dataloader.py:110` |
-| 数据增强：旋转 | ±15° | `model/siamese_dataloader.py:217` |
-| 数据增强：HSV 色相 | ±18 | `model/siamese_dataloader.py:225` |
-| 数据增强：HSV 饱和度 | 0.3-1.7 | `model/siamese_dataloader.py:226` |
-| 数据增强：HSV 明度 | 0.7-1.3 | `model/siamese_dataloader.py:227` |
-
-### 导出 ONNX
-
-训练完成后用 PyTorch 自带的 `torch.onnx.export()` 导出，覆盖到 `core/checkpoints/click1_siamese_yolo4_best.onnx`（或对应路径）即可。
-
-详见 PyTorch 官方文档：https://pytorch.org/docs/stable/onnx.html
+完整数据采集、标注、YOLOv8 检测训练、Siamese MobileNetV4 对比/三元组训练及 ONNX 导出脚本位于仓库 [`train/`](../train/README.md) 与 [`model/`](../model/README.md)：
+1. 训练导出新 ONNX 后覆盖 `core/checkpoints/` 对应文件即可用于桌面端；
+2. 运行 `python scripts/prepare_mobile_assets.py`（或 `python build_android.py --prepare-only`）即可同步检查 IR/Opset 兼容性并更新至移动端 `mobile/assets/models/`。
 
 ---
 
 ## 🛠️ 故障排查
 
 <details>
-<summary><b>Q1: 启动后日志报「模型加载失败」？</b></summary>
+<summary><b>Q1: 桌面端日志提示模型加载失败？</b></summary>
 
-检查：
-- `core/checkpoints/` 目录是否存在
-- 4 个 ONNX 文件是否齐全
-- ONNX 文件大小是否正常（每个约 20-80MB）
-
-如果 exe 用户碰到：尝试解压一份新的 v5 zip 替换 `_internal/core/checkpoints/`。
+- **发行包用户**：核对 `_internal/core/checkpoints/` 下 4 个 `*.onnx` 文件（共约 `139 MiB`）与 `_internal/ddddocr_lite/` 下 `common_old.onnx` + `charset_old.json` 是否完整，切勿被杀毒软件误删。
+- **源码用户**：确认 `core/checkpoints/` 存在 4 个 `.onnx` 且已安装 `onnxruntime>=1.17.0`（请安装 CPU 版，无 CUDA 机器装 GPU 版会更慢或报错）。
 </details>
 
 <details>
-<summary><b>Q2: 06:30 前的测试中验证码不识别？</b></summary>
+<summary><b>Q2: 某次抢座点选未通过怎么复盘？</b></summary>
 
-这是设计如此。本地模型仅在 06:30:00–06:35:00 启用，其他时段直接换座。
-
-如果你想测试，临时修改 `logic/booker.py:LOCAL_CAPTCHA_WINDOW_START/END` 为当前时间附近的窗口。
+- **桌面端**：打开 `logs/sessions/<时间戳>_<学号>/*_captcha_*.png`，图中直接叠加绘制了目标字、背景图、YOLO 检测绿圈与最终点击红点。
+- **手机端**：进入 **「我的 ▸ 运行记录与识图回放」** 可直接可视化回看每次推理的红绿点与耗时。
 </details>
 
 <details>
-<summary><b>Q3: ONNX runtime 报错 / 提示缺失？</b></summary>
+<summary><b>Q3: 移动端为什么默认不开启 FP16 压缩？</b></summary>
 
-```powershell
-pip install --force-reinstall onnxruntime>=1.17.0
-```
-
-或在源码方式下：
-
-```powershell
-pip install -r requirements.txt
-```
+Flutter `onnxruntime: ^1.4.1` 内置 ONNX Runtime 1.15.1，部分算子（如 `ReduceMax`）缺乏 FP16 内核实现；因此 `scripts/prepare_mobile_assets.py` 默认导出**原版无损 FP32 / INT8**，以约 159.5 MB 体积换取与桌面端 100% 一致的识别精度和零算子报错。
 </details>
-
-<details>
-<summary><b>Q4: 推理太慢（> 3s）？</b></summary>
-
-- 关闭其他 CPU 密集进程（浏览器开了 20 个 tab 等）
-- 确认 `onnxruntime` 不是 GPU 版（GPU 版在无 CUDA 设备上反而慢）
-- 双账号并发时，第二个账号通过锁等待，属正常
-</details>
-
-<details>
-<summary><b>Q5: Click3 准确率很低？</b></summary>
-
-Click3 难度高（3 点全对才算成功）。本项目 Click3 模型还在迭代中：
-- v5.0.0 开发阶段测试集：73-74%
-- 生产环境（含双账户压力）：~57%
-
-如果你常抢 Click3 验证码的自习室，建议保留备用账号或调整为 Click1 高峰期。
-</details>
-
----
-
-## 🔗 相关文档
-
-- 📦 [v5.0.0 升级日志](RELEASE_NOTES_V5.md) — 三大重构整体概述
-- 🚀 [v3→v5 升级指南](MIGRATION_V3_TO_V5.md) — 升级时需要的依赖与配置变更
-- 🏗️ [架构文档](ARCHITECTURE.md) — 整体模块分层
-- 🎨 [GUI 架构](GUI_QT_ARCHITECTURE.md) — PySide6 GUI 拆分
-- 📋 [反馈消息](FEEDBACK_MESSAGES.md) — 系统反馈与程序行为
-- 🔢 [数字参数](NUMERIC_PARAMETERS.md) — 所有超时/延迟/阈值（含 YOLO+Siamese 参数）
-- 📊 [v5 性能基准](V5_PERFORMANCE.md) — 实测数据
-- 📜 [TEST_SUMMARY.md](TEST_SUMMARY.md) — v3 模型时期测试数据（历史参考）

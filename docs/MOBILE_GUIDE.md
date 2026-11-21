@@ -1,6 +1,6 @@
 # 📱 LNU-LibSeat 手机独立版（Android & iOS）编译与技术说明
 
-> 完整用户功能介绍与实机截图请看 **[手机独立版 README](../mobile/README.md)**；iPhone 零元安装保姆教程请看 **[iOS 安装教程](IOS_INSTALL_GUIDE.md)**。
+> 完整用户功能介绍与实机截图请看 **[手机独立版 README](../mobile/README.md)**；安卓直装与国产 ROM 隔夜防冻结指南请看 **[Android 直装与保活教程](ANDROID_INSTALL_GUIDE.md)**；iPhone 零元安装保姆教程请看 **[iOS 安装教程](IOS_INSTALL_GUIDE.md)**。
 >
 > 回应社区 [Issue #6](https://github.com/xunrana/LNU-LibSeat-Automation/issues/6) 诉求：**100% 脱离电脑、零服务器成本**，在 Android 与 iPhone 本地直接运行 **纯 HTTP API 毫秒级直连引擎 + 原版无损 FP32/INT8 YOLOv8 & Siamese ONNX 验证码识别**。
 
@@ -19,7 +19,7 @@
    - 电子阅览座签（支持合并/主号/副号三视角 + 一键取消 + 系统级签到防违约提醒开关）。
    - 七日违约信用双号守护（`x / 3` 防黑名单预警）、暂离防丢座倒计时、馆内专注计时、官方公告与「辽大自习书简」。
 4. **🌙 双端 06:30 过夜保活 + 银杏夜守**：
-   - **Android**：前台常驻通知服务 + 10 小时 `PARTIAL_WAKE_LOCK` + `AlarmManager.setExactAndAllowWhileIdle` 精确闹钟 + 一键电池优化白名单。
+   - **Android**：5 重隔夜防杀——前台常驻守夜服务（`IMPORTANCE_DEFAULT` 静音通道）+ 动态 26 小时 `PARTIAL_WAKE_LOCK` + `WifiLock` 防息屏断网 + `AlarmClock` 主唤醒 / `prepAt` 预热轻推双闹钟 + Android 14 `MODE_BACKGROUND_ACTIVITY_START_ALLOWED` / `CATEGORY_ALARM` 锁屏全屏强制解冻 + 进程被杀冷启动续抢 / 手机重启自动重挂闹钟 + App 内 4 项实时权限体检与国产 ROM 白名单引导。
    - **iOS**：内置 **锁屏后台静音保活**（`UIBackgroundModes: audio` 全零静音流，不打断听歌、抢完自动释放）+ **纯 CPU `ImageIO + CoreGraphics` 图像解码**（息屏零 Metal GPU 依赖）+ **OLED 纯黑「银杏夜守」**防烧屏床头时钟 + `lnulibseat://rush?mode=auto` 快捷指令深链。
 
 ---
@@ -44,8 +44,8 @@ python build_android.py
 脚本将自动完成：
 1. 导出全部 **5 个原版无损 ONNX 模型**（总计 `159.52 MB`，自动确保 IR≤8 / Opset≤18 兼容移动版 ONNX Runtime 1.15.1，数值偏差 `0.00000`）；
 2. 将 `info/*.txt` 双校区 21 间自习室离线座号打包为 `mobile/assets/rooms/room_catalog.json` 并生成双端校徽图标；
-3. 导出跨语言黄金测试向量并跑通 `flutter test`（18 项契约与界面单测，含 Python Pillow 逐字节 SHA-256 校验）；
-4. 产出：`dist/辽宁大学图书馆座位预约.apk`（ARM64 独立离线包，安卓手机直接安装即用）。
+3. 导出跨语言黄金测试向量并跑通 `flutter test`（19 项契约与界面单测，含 Python Pillow 逐字节 SHA-256 校验）；
+4. 产出：`dist/辽宁大学图书馆座位预约.apk`（ARM64 独立离线包，与 Releases 发布的 `LNU-LibSeat-Android-arm64.apk` 为同一构建产物）。
 
 ### 3. 在 Mac 上一键免付费打包 iOS 安装包 (`.ipa`)
 在 macOS 仓库根目录运行（**无需付费 Apple 开发者账号**）：

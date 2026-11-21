@@ -51,6 +51,8 @@
 
 - **Windows**：下载 `LNU-LibSeat-v6.0.0-Windows-x86_64.zip` → 解压双击 `LNU-LibSeat.exe`
 - **macOS**：下载 `LNU-LibSeat-v6.0.0-macOS-arm64.zip` → 右键运行 `首次运行请先双击我.command`
+- **Android（安卓手机，0 元直接安装）**：下载 `LNU-LibSeat-Android-arm64.apk`（内置 5 个原版无损 ONNX 模型 + 5 重隔夜防杀保活 + Android 14 锁屏全屏解冻 + 银杏夜守），详细安装与国产 ROM 防冻结步骤见 [Android 直装与保活教程](ANDROID_INSTALL_GUIDE.md) · [手机独立版说明](../mobile/README.md)
+- **iOS（iPhone / iPad，0 元免费自签）**：下载 `LNU-LibSeat-iOS-arm64-unsigned.ipa`（内置 5 个原版无损 ONNX 模型 + 锁屏后台静音保活 + 银杏夜守），详细图文安装步骤见 [iOS 零元安装教程](IOS_INSTALL_GUIDE.md) · [手机独立版说明](../mobile/README.md)
 - **v5 老用户**：旧 `config.py` 直接复制过来即可运行，废弃的 `BROWSER` / `DRIVER_PATH` / `WEBDRIVER_CACHE` 会被自动静默忽略。详见 [v5 → v6 升级指南](MIGRATION_V5_TO_V6.md)。
 
 ---

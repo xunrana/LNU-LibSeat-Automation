@@ -10,6 +10,7 @@
 
 ## 手机独立版（Android & iOS）
 - [mobile/README.md](../mobile/README.md) — **📱 手机独立版完整说明与实机截图**
+- [ANDROID_INSTALL_GUIDE.md](ANDROID_INSTALL_GUIDE.md) — **🤖 Android 安卓零元直装与 06:30 隔夜防杀保活教程**
 - [IOS_INSTALL_GUIDE.md](IOS_INSTALL_GUIDE.md) — **🍎 iPhone / iOS 零元免费安装与过夜保活教程**
 - [MOBILE_GUIDE.md](MOBILE_GUIDE.md) — 🛠️ 手机端本地编译（APK / IPA）与技术说明
 

@@ -45,7 +45,7 @@
 > [!IMPORTANT]
 > ✨ **纯 HTTP API 直连引擎 + 手机独立版（iOS & Android）现已上线！**
 > - 💻 **电脑桌面端（Windows / macOS）**：彻底移除 Selenium / 浏览器依赖，实测核心下单 **0.55 秒**。详见 [v6.0.0 发布说明](docs/RELEASE_NOTES_V6.md) · [v5 → v6 升级指南](docs/MIGRATION_V5_TO_V6.md)。
-> - 📱 **手机独立版（iOS & Android）**：100% 脱离电脑、内置 5 个原版无损 ONNX 模型、支持全馆实时余座雷达与双端锁屏保活！详见 **[📱 手机独立版 README](mobile/README.md)** · **[🍎 iOS 零元免费安装教程](docs/IOS_INSTALL_GUIDE.md)**。
+> - 📱 **手机独立版（iOS & Android）**：100% 脱离电脑、内置 5 个原版无损 ONNX 模型、支持全馆实时余座雷达与双端锁屏保活！详见 **[📱 手机独立版 README](mobile/README.md)** · **[🤖 Android 直装与保活教程](docs/ANDROID_INSTALL_GUIDE.md)** · **[🍎 iOS 零元免费安装教程](docs/IOS_INSTALL_GUIDE.md)**。
 
 > [!WARNING]
 > 🛡️ **准时到馆签到！** 连续或 7 天内累计 **3 次违约 = 黑名单 7 天**，期间无法预约。
@@ -175,11 +175,11 @@ Mac 双击不了 `.exe`，请下载 macOS 专版 `.app`：
 </table>
 </div>
 
+- **🤖 Android 安卓直装（0 元永久生效）**：前往 [GitHub Releases](https://github.com/xunrana/LNU-LibSeat-Automation/releases/latest) 下载 **`LNU-LibSeat-Android-arm64.apk`** 直接安装即用；国产 ROM（vivo / 小米 / 华为 / OPPO）防锁屏冻结设置见 👉 **[🤖 Android 直装与隔夜保活教程](docs/ANDROID_INSTALL_GUIDE.md)**。
 - **🍎 iPhone / iPad 安装（0 元免越狱）**：前往 [GitHub Releases](https://github.com/xunrana/LNU-LibSeat-Automation/releases/latest) 下载 **`LNU-LibSeat-iOS-arm64-unsigned.ipa`**，使用 Sideloadly / 爱思助手 / SideStore 免费自签安装，详细图文步骤见 👉 **[🍎 iOS 零元免费安装教程](docs/IOS_INSTALL_GUIDE.md)**。
-- **🤖 Android 手机**：可自行运行 `python build_android.py` 一键编译独立 `.apk`（或关注 Releases 附件）。
 - **⏰ 睡前 06:30 过夜保活**：
-  - Android 支持前台常驻通知 + `AlarmManager` 穿透休眠闹钟；
-  - iOS 内置 **锁屏后台静音保活 + 纯 CPU 图像解码**（按电源键锁屏也能准点开抢，抢完自动关闭），并提供 **「银杏夜守」OLED 纯黑床头时钟** 双保险。
+  - Android 内置 **5 重隔夜防杀**（`AlarmClock` + 预热轻推双闹钟 + Android 14 锁屏全屏强解冻 + 动态 26h `WakeLock` + `WifiLock` + 被杀/重启自动续抢），配齐 4 项白名单后锁屏即可准点抢；
+  - iOS 内置 **锁屏后台静音保活 + 纯 CPU 图像解码**（按电源键锁屏也能准点开抢，抢完自动关闭），双端均提供 **「银杏夜守」OLED 纯黑床头时钟** 物理级双保险。
 - **📖 完整功能说明与全套 6 张实机截图**：请查阅 **[📱 手机独立版 README](mobile/README.md)**。
 
 ---

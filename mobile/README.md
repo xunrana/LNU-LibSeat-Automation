@@ -129,7 +129,7 @@
   - 登录 4 位图形验证码：`common_old.onnx`（`ddddocr` INT8）
   - 单字点选（Click1）：`click1_yolo_plan_bg_char40_best.onnx` + `click1_siamese_yolo4_best.onnx`（FP32）
   - 三字点选（Click3，06:30 高峰）：`click3_yolo_plan_bg_char60_best.onnx` + `click3_siamese_yolo4_posw3_best.onnx`（FP32）
-- **逐像素算子对齐**：完整移植 Python Pillow 22-bit 定点 `BILINEAR / BICUBIC / LANCZOS` 重采样与 ITU-R 601-2 灰度公式，通过 18 项跨语言契约单测（SHA-256 逐字节 0 误差校验）；Android 走原生 CPU `BitmapFactory`、iOS 走原生 CPU `ImageIO + CoreGraphics`，全程在后台独立 Isolate 推理，不卡 UI、息屏不依赖 GPU，**识别率与桌面端基本一致**。
+- **逐像素算子对齐**：完整移植 Python Pillow 22-bit 定点 `BILINEAR / BICUBIC / LANCZOS` 重采样与 ITU-R 601-2 灰度公式，通过 19 项跨语言契约与界面单测（SHA-256 逐字节 0 误差校验）；Android 走原生 CPU `BitmapFactory`、iOS 走原生 CPU `ImageIO + CoreGraphics`，全程在后台独立 Isolate 推理，不卡 UI、息屏不依赖 GPU，**识别率与桌面端基本一致**。
 - **识图回放与诊断**：在「我的 ▸ 运行记录与识图回放」可查看每次验证码的 YOLO 候选框、最终点击红点与耗时，支持一键导出脱敏诊断日志。
 
 ---
@@ -138,10 +138,10 @@
 
 > 安装包均发布在仓库 [GitHub Releases](https://github.com/xunrana/LNU-LibSeat-Automation/releases/latest)（或自行通过下方开发者命令本地编译）。
 
-### 🤖 Android（安卓手机）
-1. 下载 `辽宁大学图书馆座位预约.apk`（ARM64 独立离线包，已内置全部 5 个模型）。
-2. 在手机上直接点击安装（若提示「未知来源应用」，允许安装即可）。
-3. 首次打开后，建议立即进入 **「我的 ▸ 晨约守夜与后台保活」**，点击 **「加入电池优化白名单」**，并在手机系统设置中为本 App 开启「允许后台高耗电 / 允许自启动 / 多任务卡片加锁」。
+### 🤖 Android（安卓手机，0 元直装、永久生效）
+1. 前往 [GitHub Releases](https://github.com/xunrana/LNU-LibSeat-Automation/releases/latest) 下载 **`LNU-LibSeat-Android-arm64.apk`**（约 `165.9 MB`，ARM64 独立离线包，已内置全部 5 个无损 ONNX 模型；本地编译产物名为 `dist/辽宁大学图书馆座位预约.apk`）。
+2. 在手机上直接点击安装（若提示「未知来源应用 / 未备案风险提醒」，允许并继续安装即可；后续升级直接覆盖安装，不丢配置）。
+3. 首次打开后，强烈建议立即进入 **「我的 ▸ 晨约守夜与后台保活」** 点亮 4 项体检开关，并对照品牌完成一次性防锁屏冻结设置，详细分品牌图文步骤见 👉 **[🤖 Android 直装与 06:30 隔夜保活教程](../docs/ANDROID_INSTALL_GUIDE.md)**。
 
 ### 🍎 iPhone / iPad（iOS 15.0+，无需越狱、无需付费账号）
 
@@ -178,10 +178,12 @@
 
 手机操作系统都会在夜间限制后台耗电，**请务必按对应系统做好保活**：
 
-### 🤖 Android 过夜指南（支持息屏锁屏唤醒）
-- 启动定时后，App 会自动拉起**前台常驻通知服务**（通知栏显示倒计时）+ 10 小时 CPU `WakeLock` + `AlarmManager.setExactAndAllowWhileIdle` 穿透 Doze 休眠闹钟。
-- **必做准备**：在 **「我的 ▸ 晨约守夜与后台保活」** 加入电池优化白名单；国产手机（小米澎湃 / 华为鸿蒙 / OPPO / vivo）请额外在系统设置中开启「允许自启动 + 无限制后台耗电」，并在最近任务界面给本 App **加锁**。
-- 完成以上配置后，**可直接锁屏息屏睡觉**（插电更稳）。
+### 🤖 Android 过夜指南（5 重隔夜防杀 + 锁屏解冻，详见 [保活教程](../docs/ANDROID_INSTALL_GUIDE.md)）
+- **内置 5 重防杀机制**：前台常驻守夜通知（`IMPORTANCE_DEFAULT` 静音通道）+ 动态 26 小时 CPU `WakeLock` + `WifiLock` 防息屏断网 + `AlarmClock`（提前 20 秒）与预热轻推双闹钟 + Android 14 `MODE_BACKGROUND_ACTIVITY_START_ALLOWED` / `CATEGORY_ALARM` 锁屏全屏强制解冻 + 进程被杀冷启动复活 / 手机夜间重启自恢复。
+- **国产 ROM 必做准备（一次性设置，防锁屏墓碑冻结）**：
+  1. 在 **「我的 ▸ 晨约守夜与后台保活」** 将 **电池优化白名单、精确闹钟、系统通知、锁屏全屏唤醒（Android 14+）** 4 项全部点亮为绿色；
+  2. 点击页底 **「vivo / 小米 / 华为 / OPPO 专属保活项」**，在系统设置中开启 **允许后台高耗电 + 自启动 + 后台弹出界面 + 锁屏显示**，并在最近任务界面给本 App **加锁**。
+- 完成以上配置后**可直接锁屏息屏睡觉**（建议先用「当前时间 + 2 分钟」锁屏自测一次；期末/考研同样支持开启 **「银杏夜守」** 插电不锁屏作 100% 物理级双保险）。
 
 ### 🍎 iPhone 过夜指南（双保险方案）
 - **方案 A：内置「iOS 锁屏后台静音保活」（已自动启用，可按电源键锁屏）**
@@ -235,7 +237,7 @@ python3 build_ios.py
 ```
 脚本将自动完成：
 1. 导出 5 个原版无损 ONNX 模型（自动校验 IR≤8 / Opset≤18 兼容性）、21 间自习室离线座号目录与蓝金校徽图标；
-2. 导出 Python 黄金测试向量并运行 `flutter test`（18 项跨语言契约与界面单测全量通过）；
+2. 导出 Python 黄金测试向量并运行 `flutter test`（19 项跨语言契约与界面单测全量通过）；
 3. 若微软旧 CocoaPods 归档源不可用，自动从微软官方 NuGet `Microsoft.ML.OnnxRuntime 1.15.1` 解包官方 iOS `onnxruntime.xcframework` 至本地 Pod；
 4. 执行 `flutter build ios --release --no-codesign` 并封装纯净 `Payload/Runner.app`（无 `__MACOSX` 冗余元数据）。
 
@@ -276,6 +278,6 @@ flutter test
 
 <div align="center">
 
-[⬅️ 返回仓库主 README（电脑桌面版）](../README.md) · [🍎 iOS 保姆级安装教程](../docs/IOS_INSTALL_GUIDE.md) · [🛠️ 移动端编译说明](../docs/MOBILE_GUIDE.md) · [🐛 反馈问题](https://github.com/xunrana/LNU-LibSeat-Automation/issues)
+[⬅️ 返回仓库主 README（电脑桌面版）](../README.md) · [🤖 Android 直装与保活教程](../docs/ANDROID_INSTALL_GUIDE.md) · [🍎 iOS 保姆级安装教程](../docs/IOS_INSTALL_GUIDE.md) · [🛠️ 移动端编译说明](../docs/MOBILE_GUIDE.md) · [🐛 反馈问题](https://github.com/xunrana/LNU-LibSeat-Automation/issues)
 
 </div>

@@ -22,10 +22,10 @@ labels: bug
 ## 运行环境
 
 - 使用平台（可勾选）：
-  - [ ] 🤖 Android 手机（手机品牌 + 系统版本，例如 vivo S15 Pro / OriginOS 4 / Android 14）
-  - [ ] 🪟 Windows 电脑（Windows 10 / 11）
-  - [ ] 🍎 iPhone / iPad（机型 + iOS 版本 + 安装方式如 Sideloadly / 爱思 / SideStore）
-  - [ ] 💻 macOS 电脑（芯片：Apple Silicon / Intel）
+  - [ ] Android 手机（请注明品牌与系统版本，如 vivo OriginOS 4 / Android 14）
+  - [ ] Windows 电脑（Windows 10 / 11）
+  - [ ] iPhone / iPad（机型、iOS 版本、安装工具如 Sideloadly / 爱思 / SideStore）
+  - [ ] macOS 电脑（Apple Silicon / Intel）
 - 使用方式：[ ] Releases 预打包安装包　[ ] 本地源码运行
 - 版本 / commit：
 

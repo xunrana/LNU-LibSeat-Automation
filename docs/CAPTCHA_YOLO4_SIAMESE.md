@@ -1,23 +1,15 @@
-<div align="center">
+# 验证码识别引擎：YOLOv8 + Siamese
 
-# 🧠 验证码识别引擎：YOLOv8 + Siamese（桌面 & 移动同源）
+LNU-LibSeat v6.0.0 桌面端与移动端共用的本地离线 ONNX 验证码识别管线说明。
 
-### LNU-LibSeat v6.0.0 全平台纯端侧离线 ONNX 管线
-
-[← 返回 README](../README.md) ·
-[全仓架构文档](ARCHITECTURE.md) ·
-[纯 API 协议契约](API_PROTOCOL_CONTRACT.md) ·
-[移动端架构与构建](MOBILE_GUIDE.md) ·
-[数字参数清单](NUMERIC_PARAMETERS.md)
-
-</div>
+[← 返回首页](../README.md) · [架构文档](ARCHITECTURE.md) · [纯 API 协议契约](API_PROTOCOL_CONTRACT.md) · [移动端构建](MOBILE_GUIDE.md) · [数字参数](NUMERIC_PARAMETERS.md)
 
 > [!NOTE]
-> 本文文件名及部分源码文件名中的 **`yolo4`**（如 `core/captcha_yolo4_siamese.py`）仅为项目早期内部实验代号，**不代表检测器架构版本**。实际检测骨干为 [Ultralytics **YOLOv8**](https://github.com/ultralytics/ultralytics)，孪生相似度骨干为 **MobileNetV4-Conv-Medium**；沿用旧文件名仅为向后兼容。
+> 本文及部分源码文件名中的 **`yolo4`**（如 `core/captcha_yolo4_siamese.py`）是早期实验代号，不是架构版本。实际检测模型是 [Ultralytics YOLOv8](https://github.com/ultralytics/ultralytics)，匹配网络是 MobileNetV4-Conv-Medium；保留旧文件名只是为了兼容。
 
 ---
 
-## 📑 目录
+## 目录
 
 - [两类验证码与全仓 5 模型清单](#-两类验证码与全仓-5-模型清单)
 - [v6 纯 API 全链路推理管线](#-v6-纯-api-全链路推理管线)

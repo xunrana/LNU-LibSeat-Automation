@@ -1,21 +1,8 @@
-﻿<div align="center">
+﻿# 业务反馈与状态分类参考（v6 纯 API）
 
-# 💬 业务反馈与状态分类参考（v6 纯 API）
+桌面端（`logic/result_classifier.py`）与移动端（`mobile/lib/logic/result_classifier.dart`）共用的结果决策树，已由跨语言单测锁定一致。v5 时代的浏览器 DOM / toast 检测逻辑已移除。
 
-### 桌面端（Python）与移动端（Dart）统一结果决策树
-
-[← 返回 README](../README.md) ·
-[纯 API 协议契约](API_PROTOCOL_CONTRACT.md) ·
-[全仓架构文档](ARCHITECTURE.md) ·
-[数字参数清单](NUMERIC_PARAMETERS.md)
-
-</div>
-
----
-
-> 📦 适用于 **LNU-LibSeat v6.0.0 全平台**（桌面端 `logic/result_classifier.py` 与移动端 `mobile/lib/logic/result_classifier.dart` 100% 语义对齐，已由跨语言单测锁定）。
->
-> 注：v5 时代的浏览器 DOM / `page_source` / Element UI toast 检测逻辑已随 Selenium 一并移除。
+[← 返回首页](../README.md) · [纯 API 协议契约](API_PROTOCOL_CONTRACT.md) · [架构文档](ARCHITECTURE.md) · [数字参数](NUMERIC_PARAMETERS.md)
 
 ---
 

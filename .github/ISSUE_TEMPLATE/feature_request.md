@@ -7,11 +7,11 @@ labels: enhancement
 
 ## 适用平台
 
-- [ ] 🤖 Android 手机版
-- [ ] 🪟 Windows 桌面版
-- [ ] 🍎 iPhone / iOS 版
-- [ ] 💻 macOS 桌面版
-- [ ] 🌐 全平台通用
+- [ ] Android 手机版
+- [ ] Windows 桌面版
+- [ ] iPhone / iOS 版
+- [ ] macOS 桌面版
+- [ ] 全平台通用
 
 ## 想解决的问题
 

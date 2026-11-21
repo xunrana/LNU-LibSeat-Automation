@@ -1,19 +1,12 @@
-<div align="center">
+# v5 → v6 升级指南
 
-# 🚀 v5 → v6 升级指南
+旧版 `config.py` 直接复制过来就能用，几分钟即可切到纯 API 版本。
 
-### 2 分钟平滑迁移到纯 API 引擎
-
-[← 返回 README](../README.md) ·
-[v6.0.0 发布说明](RELEASE_NOTES_V6.md) ·
-[配置详解](CONFIGURATION.md) ·
-[架构文档](ARCHITECTURE.md)
-
-</div>
+[← 返回首页](../README.md) · [v6.0.0 更新说明](RELEASE_NOTES_V6.md) · [配置详解](CONFIGURATION.md) · [架构文档](ARCHITECTURE.md)
 
 ---
 
-## 🎯 为什么要升 v6？
+## 为什么要升 v6？
 
 | 痛点（v5 Selenium） | 解决（v6 纯 API） |
 |---|---|
@@ -26,15 +19,15 @@
 
 ---
 
-## 🟢 Windows / macOS 桌面用户升级（推荐，2 分钟）
+## Windows / macOS 桌面端升级（最简单）
 
-> 💡 **顺带一提**：如果你有 **Android 手机** 且不想再开电脑挂机，v6 现已同步推出 **[🤖 Android 手机独立版（0 元直装、永久免续签）](ANDROID_INSTALL_GUIDE.md)**，100% 脱离电脑运行！（iPhone 用户见 [iOS 安装教程](IOS_INSTALL_GUIDE.md)）
+> 如果你有 Android 手机且不想再每天开电脑，v6 现在也提供了 **[Android 手机独立版](ANDROID_INSTALL_GUIDE.md)**（直接装 APK，不用续签）；iPhone 用户见 [iOS 安装教程](IOS_INSTALL_GUIDE.md)。
 
-1. **备份旧 `config.py`**（含你的学号密码和首选座）。
-2. 前往 [Releases](https://github.com/XUNRANA/LNU-LibSeat-Automation/releases/latest) 下载 **`LNU-LibSeat-v6.0.0-Windows-x86_64.zip`**（`204.6 MB`，较 v5 瘦身 408MB+；macOS 下载 `LNU-LibSeat-v6.0.0-macOS-arm64.zip`，`193.6 MB`），解压到**新目录**。
-3. 直接把旧 `config.py` 复制到新目录（与 `LNU-LibSeat.exe` / `.app` 同级）即可双击运行！
-   - 旧配置里的 `BROWSER` / `DRIVER_PATH` / `WEBDRIVER_CACHE` 会被 **自动静默忽略**，不需要手动删除。
-   - 下次点「开始抢座」时，GUI 会自动帮你重写为干净的 v6 格式 `config.py`。
+1. **备份旧 `config.py`**（里面存着你的学号、密码和首选座）。
+2. 去 [Releases](https://github.com/XUNRANA/LNU-LibSeat-Automation/releases/latest) 下载 `LNU-LibSeat-v6.0.0-Windows-x86_64.zip`（204.6 MB，比 v5 小了 400 MB+；Mac 下 `LNU-LibSeat-v6.0.0-macOS-arm64.zip`，193.6 MB），解压到新目录。
+3. 把旧 `config.py` 复制到新目录（和 `LNU-LibSeat.exe` / `.app` 同级）直接运行即可：
+   - 旧配置里的 `BROWSER`、`DRIVER_PATH`、`WEBDRIVER_CACHE` 会被自动忽略，不用手动删；
+   - 下次点「开始抢座」时，GUI 会自动保存成干净的 v6 格式 `config.py`。
 
 ---
 

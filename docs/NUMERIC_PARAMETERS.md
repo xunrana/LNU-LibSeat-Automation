@@ -1,20 +1,8 @@
-<div align="center">
+# 关键数字参数参考手册（v6）
 
-# 🔢 关键数字参数参考手册（v6 全平台）
+桌面端（Python）与移动端（Flutter / Android / iOS）的超时、间隔、重试上限等常量清单，均逐条核对自当前 `master` 源码。
 
-### 桌面端（Python）与移动端（Flutter / Android / iOS）源码核验清单
-
-[← 返回 README](../README.md) ·
-[全仓架构文档](ARCHITECTURE.md) ·
-[配置详解](CONFIGURATION.md) ·
-[业务反馈分类](FEEDBACK_MESSAGES.md) ·
-[验证码识别引擎](CAPTCHA_YOLO4_SIAMESE.md)
-
-</div>
-
----
-
-> 📦 适用于 **LNU-LibSeat v6.0.0 全平台**。本文所有参数均逐条核对自当前 `master` 真实源码，已彻底清除 v5 浏览器/Selenium 废弃模块参数。
+[← 返回首页](../README.md) · [架构文档](ARCHITECTURE.md) · [配置详解](CONFIGURATION.md) · [业务反馈分类](FEEDBACK_MESSAGES.md) · [验证码引擎](CAPTCHA_YOLO4_SIAMESE.md)
 
 ---
 

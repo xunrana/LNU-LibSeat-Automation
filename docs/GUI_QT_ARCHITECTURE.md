@@ -1,20 +1,12 @@
-<div align="center">
+# 桌面端 GUI 架构（PySide6）
 
-# 🎨 桌面端 GUI 架构文档
+适用于 LNU-LibSeat v6.0.0 桌面端（Windows / macOS）。
 
-### LNU-LibSeat v6.0.0 — PySide6-Essentials 模块化界面（Windows 主力 · macOS）
-
-[← 返回 README](../README.md) ·
-[全仓架构文档](ARCHITECTURE.md) ·
-[配置详解](CONFIGURATION.md) ·
-[数字参数清单](NUMERIC_PARAMETERS.md) ·
-[v6.0.0 发布说明](RELEASE_NOTES_V6.md)
-
-</div>
+[← 返回首页](../README.md) · [架构文档](ARCHITECTURE.md) · [配置详解](CONFIGURATION.md) · [数字参数](NUMERIC_PARAMETERS.md) · [v6.0.0 更新说明](RELEASE_NOTES_V6.md)
 
 ---
 
-## 📑 目录
+## 目录
 
 - [整体目录结构](#-整体目录结构)
 - [主题系统](#-主题系统)

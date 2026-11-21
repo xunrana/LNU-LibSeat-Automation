@@ -132,7 +132,7 @@ Remove-Item config.py
 > v5.0.0 起验证码已改用**本地 YOLO4+Siamese 推理**，无需付费 API。
 > 如果工具帮到你，**随手扫码**欢迎赞助。❤️
 > 
-> 👉 二维码在 [README 底部 ☕ 赞助章节](../README.md#-求赞助--支持持续开发)
+> 👉 二维码在 [README 底部 ☕ 赞助章节](../README.md#赞助支持)
 
 ---
 
@@ -256,6 +256,6 @@ extended_seats.extend(fallback)
 
 **喜欢这次更新？**
 
-[⭐ Star 一下](https://github.com/XUNRANA/LNU-LibSeat-Automation) · [☕ 赞助一杯奶茶](../README.md#-求赞助--支持持续开发) · [🐛 反馈 Bug](https://github.com/XUNRANA/LNU-LibSeat-Automation/issues)
+[⭐ Star 一下](https://github.com/XUNRANA/LNU-LibSeat-Automation) · [☕ 赞助一杯奶茶](../README.md#赞助支持) · [🐛 反馈 Bug](https://github.com/XUNRANA/LNU-LibSeat-Automation/issues)
 
 </div>

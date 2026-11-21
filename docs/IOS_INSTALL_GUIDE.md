@@ -1,168 +1,113 @@
-# 🍎 iPhone / iOS 零元免费安装与过夜使用教程
+# iPhone / iOS 免费安装与过夜使用教程
 
-> **无需越狱 · 无需购买 Apple 付费开发者账号 · 完全免费自签安装**
->
-> 适用机型：运行 **iOS 15.0 及以上** 的所有 iPhone / iPad（已在 iPhone 17 / iOS 27 真机全流程实测通过）。
->
-> 相关文档：[🤖 Android 主力直装教程](ANDROID_INSTALL_GUIDE.md) · [📘 全平台快速上手](QUICKSTART.md) · [📱 手机独立版全览](../mobile/README.md) · [🛠️ 移动端架构与构建](MOBILE_GUIDE.md) · [⬅️ 返回主 README](../README.md)
+适用于 **iOS 15.0 及以上** 的 iPhone / iPad（已在 iPhone 17 / iOS 27 真机实测通过）。无需越狱，无需购买 99 美元苹果开发者账号，用普通免费 Apple ID 即可安装。
+
+[← 返回首页](../README.md) · [Android 安装教程（免续签主推）](ANDROID_INSTALL_GUIDE.md) · [手机版功能说明](../mobile/README.md) · [快速上手](QUICKSTART.md)
 
 > [!TIP]
-> **如果你同时有 Android 手机或 Windows 电脑**：推荐优先使用 **[Android 版](ANDROID_INSTALL_GUIDE.md)**（0 元直装、永久免 7 天续签）或 **[Windows 桌面版](QUICKSTART.md)**；若以 iPhone 为主力，按下方教程几分钟即可完成 0 元安装，功能与界面与 Android 版 1:1 完全一致！
+> 如果你手头同时有 Android 手机或 Windows 电脑，建议优先用 **[Android 版](ANDROID_INSTALL_GUIDE.md)**（直接装 APK，不用每 7 天续签）或 **[Windows 电脑版](QUICKSTART.md)**。如果日常只用 iPhone，按下面教程装一次也很顺手，界面和功能与 Android 版完全一致。
 
 ---
 
-## 📋 安装前了解（30 秒看懂）
+## 安装前先知道 3 件事
 
-本项目为免费开源工具，未上架 App Store（免去每年 99 美元开发者年费与审核限制），因此提供标准的**免签名 `.ipa` 安装包**：
-
-- **安装包下载**：前往 [GitHub Releases 最新版本](https://github.com/XUNRANA/LNU-LibSeat-Automation/releases/latest) 下载 **`LNU-LibSeat-iOS-arm64-unsigned.ipa`**（约 147 MB，已离线内置全部 5 个无损 ONNX 验证码识别模型）。
-- **为什么需要签名？** 苹果要求装进 iPhone 的所有 App 都必须带有签名证书。使用你自己的**普通免费 Apple ID** 即可免费签发个人开发证书（**0 元**）。
-- **免费自签的正常限制**：
-  1. **每 7 天需要续签一次**（到期前用工具原位覆盖重签，**学号、偏好、自习方案等本地数据不会丢失**；用 SideStore 可实现手机端无线自动续签）；
-  2. 同一个免费 Apple ID 最多同时在手机上装 **3 个**自签 App；
-  3. 如果担心输入主 Apple ID 密码，**强烈建议专门注册一个空闲小号 Apple ID 用于签名**，与主账号完全隔离。
+1. **下载文件**：去 [GitHub Releases](https://github.com/XUNRANA/LNU-LibSeat-Automation/releases/latest) 下载 **`LNU-LibSeat-iOS-arm64-unsigned.ipa`**（约 146.7 MB，内置全部 5 个本地 ONNX 验证码模型）。
+2. **为什么需要自签**：苹果限制非 App Store 应用必须带签名证书才能装进手机，普通免费 Apple ID 可以免费签发个人开发证书。
+3. **免费自签的正常限制**：
+   - 证书每 **7 天过期一次**，到期前用原工具原位覆盖重签一下就行（**不要先卸载**，账号、配置和方案都不会丢；用 SideStore 可以连 Wi-Fi 无线续签）；
+   - 同一个免费 Apple ID 最多同时装 **3 个**自签 App；
+   - 如果介意在侧载工具里登主 Apple ID，**花 1 分钟注册一个空白小号 Apple ID 专门用来签名**最省心。
 
 ---
 
-## 🧭 选择适合你的安装方式（任选其一）
+## 选一种适合你的安装方式
 
-| 方式 | 需要电脑吗？ | 推荐指数 | 特点与有效期 |
-| :--- | :--- | :--- | :--- |
-| **方式一：Sideloadly**（Win / Mac） | 仅签名时需数据线连电脑 | ⭐⭐⭐⭐⭐ | **最通用、最稳定**，Windows / Mac 通吃，7 天续签一次 |
-| **方式二：爱思助手**（Win / Mac） | 仅签名时需数据线连电脑 | ⭐⭐⭐⭐⭐ | **中文界面最直观**，国内同学最熟悉，7 天续签一次 |
-| **方式三：SideStore / AltStore** | 仅首次装 SideStore 需电脑 | ⭐⭐⭐⭐ | 装完后**手机连 Wi-Fi 即可自动/一键续签**，彻底告别插线 |
-| **方式四：Xcode 真机直装**（Mac） | 需要 Mac + Xcode | ⭐⭐⭐ | 适合自己改代码/编译的同学，7 天续签一次 |
-| **方式五：TrollStore（巨魔商店）** | 无需电脑 | ⭐⭐⭐⭐⭐ | 若手机系统版本支持巨魔，导入即**永久生效、永不过期** |
-
----
-
-## 🛠️ 分步安装教程
-
-### 方式一：使用 Sideloadly 安装（推荐，Windows / macOS 通用）
-
-1. **准备软件**
-   - 前往 [sideloadly.io](https://sideloadly.io/) 下载并安装 **Sideloadly**。
-   - **Windows 用户必看**：需额外安装**非 Microsoft Store 网页版**的 [iTunes](https://www.apple.com/itunes/download/win64) 与 [iCloud](https://updates.cdn-apple.com/2020/windows/001-39935-20200911-1A70AA56-F448-11EA-8CC0-99D41950005E/iCloudSetup.exe)（仅装驱动即可，无需登录 iCloud）。macOS 用户无需装额外驱动。
-2. **连接 iPhone**
-   - 用数据线将 iPhone 连到电脑，手机弹出「要信任此电脑吗？」时点击 **信任** 并输入锁屏密码。
-3. **导入 IPA 并签名安装**
-   - 打开 Sideloadly，确认 `iDevice` 一栏已识别到你的 iPhone；
-   - 将下载好的 `LNU-LibSeat-iOS-arm64-unsigned.ipa` **拖入**左侧 IPA 图标框；
-   - 在 `Apple ID` 输入框填写你的免费 Apple ID（建议用小号）；
-   - 点击 **`Start`** → 按提示输入 Apple ID 密码与双重认证 6 位验证码；
-   - 等待进度条走完显示 **`Done`**，手机桌面就会出现蓝金校徽的 **LNU-LibSeat** 图标！
-4. **7 天后续签**
-   - 7 天后若点击 App 闪退，只需数据线连电脑再用 Sideloadly **重新拖入同一个 `.ipa` 点 `Start` 覆盖安装**（**不要先卸载 App**），原有账号配置和自习方案会完整保留。
+| 方式 | 要电脑吗 | 特点与有效期 |
+| :--- | :---: | :--- |
+| **1. Sideloadly**（推荐） | 签名时连一次 | Windows / Mac 通用、最稳定，7 天续签一次 |
+| **2. 爱思助手**（推荐） | 签名时连一次 | 全中文界面最直观，Windows / Mac 通用，7 天续签一次 |
+| **3. SideStore / AltStore** | 仅首次装 SideStore | 装完后手机连 Wi-Fi 就能无线续签，以后不用插线 |
+| **4. Xcode 真机装** | 需 Mac + Xcode | 适合自己改代码编译的开发者，7 天续签一次 |
+| **5. TrollStore（巨魔）** | 不用电脑 | 若系统版本支持巨魔，导入即**永久生效** |
 
 ---
 
-### 方式二：使用爱思助手安装（中文界面，Windows / macOS 通用）
+### 方式一：Sideloadly（Windows / Mac 通用）
 
-1. 下载并打开 **[爱思助手](https://www.i4.cn/)**，数据线连接 iPhone 并在手机上点「信任此电脑」。
-2. 顶部点击 **「工具箱」▸「IPA 签名」**。
-3. 点击 **「添加 IPA 文件」**，选中 `LNU-LibSeat-iOS-arm64-unsigned.ipa`。
-4. 切换到 **「使用 Apple ID 签名」**，点击 **「添加 Apple ID」** 输入你的免费 Apple ID 与密码，勾选该账号后点 **「开始签名」**。
-5. 签名成功后，点击「打开已签名 IPA 位置」，再在爱思助手「我的设备 ▸ 应用游戏 ▸ 导入安装」选中刚签好的 `.ipa` 装进手机即可。
+1. 去 [sideloadly.io](https://sideloadly.io/) 下载并安装 Sideloadly。
+   - **Windows 用户注意**：需要装**网页版（非微软商店版）**的 [iTunes](https://www.apple.com/itunes/download/win64) 和 [iCloud](https://updates.cdn-apple.com/2020/windows/001-39935-20200911-1A70AA56-F448-11EA-8CC0-99D41950005E/iCloudSetup.exe) 提供驱动（不用登录 iCloud）；Mac 不用装额外驱动。
+2. 数据线连上 iPhone，手机上点 **信任此电脑** 并输入锁屏密码。
+3. 打开 Sideloadly，确认 `iDevice` 识别到了你的 iPhone；把 `LNU-LibSeat-iOS-arm64-unsigned.ipa` 拖进左侧 IPA 框，填免费 Apple ID（建议小号），点 **`Start`**，按提示输密码和 6 位验证码，跑完显示 **`Done`** 桌面就会出现图标。
+4. 7 天后若点开闪退，连上电脑用同一个 Apple ID 重新拖入 `.ipa` 点 `Start` **覆盖安装**即可。
 
----
+### 方式二：爱思助手（中文界面）
 
-### 方式三：使用 SideStore 无线自动续签（一次配置，长期省心）
+1. 安装并打开 [爱思助手](https://www.i4.cn/)，数据线连手机并点信任。
+2. 顶部进 **工具箱 → IPA 签名** → 点 **添加 IPA 文件** 选中 `LNU-LibSeat-iOS-arm64-unsigned.ipa`。
+3. 切到 **使用 Apple ID 签名** → 添加你的免费 Apple ID 并勾选 → 点 **开始签名**。
+4. 签名完成后点「打开已签名 IPA 位置」，再到「我的设备 → 应用游戏 → 导入安装」选刚签好的 `.ipa` 装进手机。
 
-如果你不想每 7 天插一次数据线，推荐使用开源工具 **[SideStore](https://sidestore.io/)**：
-1. 按 [SideStore 官方入门引导](https://docs.sidestore.io/docs/installation/prerequisites/) 首次用电脑把 SideStore 装到你的 iPhone；
-2. 将 `LNU-LibSeat-iOS-arm64-unsigned.ipa` 通过隔空投送（AirDrop）或微信传到 iPhone 的「文件」App 中；
-3. 打开手机上的 SideStore → 点左上角 **`+`** → 选中 `LNU-LibSeat-iOS-arm64-unsigned.ipa` 安装；
-4. 之后每隔 7 天内，只要手机连着 Wi-Fi（按 SideStore 提示开着 WireGuard 本地回环），在手机上点一下刷新（或配合快捷指令自动刷新）即可续签，**全程不再需要电脑**。
+### 方式三：SideStore（无线续签，不用每周插线）
 
----
+1. 按 [SideStore 官方文档](https://docs.sidestore.io/docs/installation/prerequisites/) 首次用电脑把 SideStore 装到手机；
+2. 把 `LNU-LibSeat-iOS-arm64-unsigned.ipa` 隔空投送或发微信存到 iPhone「文件」里；
+3. 打开 SideStore 点左上角 `+` 选中该 `.ipa` 安装；
+4. 以后每 7 天内连着 Wi-Fi 在手机上点一下刷新就能续签（也可配合快捷指令自动续）。
 
-### 方式四：Mac 开发者用 Xcode 真机直装
+### 方式四：Mac 用 Xcode 真机直装
 
-如果你已经克隆了本仓库并装有 Xcode：
-1. 在仓库根目录跑完 `python3 build_ios.py`（确保 5 个 ONNX 模型与本地 Pod 已准备完毕）；
-2. 用 Xcode 打开 **`mobile/ios/Runner.xcworkspace`**（⚠️ 必须打开白底的 `.xcworkspace`，不要打开 `.xcodeproj`）；
-3. 左侧选中 **Runner ▸ TARGETS 下的 Runner ▸ Signing & Capabilities**：
-   - 勾选 **Automatically manage signing**；
-   - **Team** 下拉选择你的免费个人账号（`Personal Team`）；
-4. **关键步骤——切换为 Release 模式**：
-   - 点击顶部中间 **`Runner`** → **`Edit Scheme...`** → 左侧选 **Run** → **Build Configuration** 改为 **`Release`**，并**取消勾选 `Debug executable`** → 点 Close；
-   - *(不改 Release 的话，拔掉数据线后再次点开 App 会直接闪退！)*
-5. 顶部设备栏选中你的真实 iPhone，点击左上角 **`▶`** 等待安装完成（首次会弹窗询问钥匙串权限，输入 Mac 开机密码并点 **「始终允许」**）。
+1. 在仓库根目录先跑完 `python3 build_ios.py`（确保 5 个 ONNX 模型与本地 Pod 已生成）；
+2. 用 Xcode 打开 **`mobile/ios/Runner.xcworkspace`**（注意是 `.xcworkspace`，不是 `.xcodeproj`）；
+3. 选 **Runner → TARGETS 下的 Runner → Signing & Capabilities**，勾 **Automatically manage signing**，Team 选你的个人免费账号；
+4. **关键一步**：点顶部中间 `Runner` → `Edit Scheme...` → 左侧选 **Run** → **Build Configuration** 改成 **`Release`** 并**取消勾选 `Debug executable`**（不改 Release 拔掉数据线重开 App 会闪退）；
+5. 设备栏选你的真机，点左上角 `▶` 安装。
 
----
+### 方式五：TrollStore（巨魔商店）
 
-### 方式五：TrollStore（巨魔商店，永久免续签）
-
-如果你的 iPhone 系统版本已安装 TrollStore：
-1. 将 `LNU-LibSeat-iOS-arm64-unsigned.ipa` 发送到手机「文件」App；
-2. 分享 → 用 **TrollStore** 打开 → 点击 **Install**；
-3. 安装后**无需信任证书、无 7 天过期限制、永久生效**。
+把 `.ipa` 存进手机「文件」→ 分享用 TrollStore 打开 → Install。无需信任证书、没有 7 天过期限制。
 
 ---
 
-## 🔓 首次打开必做两步（缺一不可！）
+## 首次打开必须做的两步
 
-安装完成后，首次在桌面点击图标可能会提示「需要开发者模式」或「未受信任的开发者」，请按顺序完成这两步：
+装完直接点桌面图标会提示「需要开发者模式」或「未受信任的开发者」，按顺序做完这两步就能进：
 
-### 第一步：开启「开发者模式」（iOS 16 及以上必需）
-1. 打开 iPhone **设置 ▸ 隐私与安全性**，滑到最底部找到 **「开发者模式」**；
-2. 打开开关 → 按提示重启手机 → 重启解锁后在弹窗中点击 **「开启」** 并输入锁屏密码。
-   > *若在「隐私与安全性」底部看不到「开发者模式」，请先用数据线完成一次 Sideloadly / 爱思助手 / Xcode 安装，它会自动出现。*
-
-### 第二步：信任个人开发者证书
-1. 打开 iPhone **设置 ▸ 通用 ▸ VPN与设备管理**；
-2. 在「开发者 App」下方点击你的 **Apple ID 邮箱**；
-3. 点击蓝字 **「信任 “Apple Development: ...”」** → 弹窗再点 **「信任」**；
-4. 返回桌面点击 **LNU-LibSeat** 图标，即可正常进入使用！（建议同步允许 App 的「通知权限」，用于抢座成功推送与防违约签到提醒。）
+1. **打开开发者模式（iOS 16+）**：打开 iPhone **设置 → 隐私与安全性**，滑到最底部打开 **开发者模式**，按提示重启手机并输入锁屏密码确认。（如果底部看不到这一项，先用上面任一工具装一次 App 就会出现。）
+2. **信任证书**：打开 **设置 → 通用 → VPN与设备管理** → 点你的 Apple ID 邮箱 → 点 **信任**。返回桌面就能正常打开了，顺手允许通知权限以便接收成功提醒和签到闹钟。
 
 ---
 
-## ⏰ iPhone 睡前设定次日 06:30 准点抢座秘籍
+## iPhone 睡前设好 06:30 怎么过夜？
 
-iOS 系统默认会在锁屏约 30 秒后冻结普通后台 App，导致普通定时脚本失效。本 App 为 iOS 提供了**双保险保活方案**：
+iOS 默认锁屏约 30 秒就会冻结普通后台 App，所以这里准备了两种办法：
 
-### 方案 A：内置「iOS 锁屏后台静音保活」（默认自动启用，可锁屏）
-- 点击开始定时抢座后，若日志中出现 **`🌙 已激活 iOS 锁屏后台保活`**，即可**直接按电源键锁屏或切去回微信**；
-- 原理：使用 `UIBackgroundModes: audio` 极低功耗全零静音流维持进程活跃（`.mixWithOthers` 不打断你听歌/刷视频、不抢占锁屏媒体卡片），并配合纯 CPU `ImageIO` 图像解码绕过锁屏 GPU 限制；**抢座结束或手动中止后立刻自动关闭释放**。
-- **过夜防踩坑 3 条铁律**：
-  1. **绝对不要**在多任务后台界面把本 App **上滑划掉**；
-  2. 设好定时准备过夜后，**不要再切出去打大型游戏或长时间拍视频**（防止内存吃紧触发 iOS Jetsam 回收后台进程）；
-  3. 睡前**关闭「低电量模式」**与系统自动重启更新，**插上充电线**放床头。
+### 办法 A：直接锁屏（内置静音后台保活，默认开启）
+- 点开始定时后，看到日志输出 `已激活 iOS 锁屏后台保活`，就可以**直接按电源键锁屏**或切微信。
+- 原理是利用 `UIBackgroundModes: audio` 在后台循环播放内存生成的全零静音音频（不会打断你听歌/看视频，也不占锁屏控制卡片，抢完或中止立刻自动关闭），同时验证码解码改走纯 CPU `ImageIO` 避开锁屏 GPU 限制。
+- **注意 3 点**：不要在后台多任务界面把 App 上滑划掉；睡前不要再去玩大型游戏或长时间录视频（防止内存吃紧被系统回收）；关掉「低电量模式」并插上充电线。
 
-### 方案 B：「银杏夜守」OLED 纯黑床头模式（期末/考研 100% 绝对稳妥）
-- 在 App 首页点击 **「夜守」**，屏幕会切换为 **纯黑 `#000000` 极微光书桌时钟**（OLED 黑色像素几乎零发光、每分钟自动微移防烧屏，并自动阻止自动息屏）；
-- **插上充电线直接放床头，不要手动按电源键锁屏**——App 始终处于 iOS 最高优先级前台，绝不会触发后台内存回收，次日 `06:29:45` 自动无声预热、`06:30:00.200` 毫秒级落座并弹提醒！
+### 办法 B：「夜守」纯黑床头时钟（期末/考研最稳妥）
+- 点首页 **夜守**，屏幕切为纯黑 `#000000` 微光时钟（每分钟微移防 OLED 烧屏，保持屏幕常亮不锁屏）。
+- **插上充电线直接放床头，不要按电源键锁屏**——App 始终处于前台，绝不会被系统冻结或回收内存。
 
 ---
 
-## 🛟 常见安装与使用问题（FAQ）
+## 常见问题
 
 <details>
-<summary><b>Q1: 安装 7 天后点图标秒退怎么办？我的配置会丢吗？</b></summary>
+<summary><b>Q1: 过了 7 天点图标闪退怎么办？数据会丢吗？</b></summary>
 
-这是免费个人 Apple ID 证书 7 天到期的正常现象。**千万不要先卸载 App！** 直接用原来的工具（Sideloadly / 爱思助手 / SideStore / Xcode）用同一个 Apple ID **重新覆盖安装一次**即可恢复打开，你的学号密码、首选座位和自习方案全部都在。
+这是免费个人证书到期的正常现象。**千万别先卸载 App**，直接用原来的签名工具和同一个 Apple ID 覆盖重装一次就能打开，学号密码和自习方案全都在。
 </details>
 
 <details>
-<summary><b>Q2: 签名时报「Maximum number of apps for free development profiles has been reached」？</b></summary>
+<summary><b>Q2: 签名提示 "Maximum number of apps for free development profiles has been reached"？</b></summary>
 
-免费 Apple ID 同一台手机最多同时安装 **3 个**自签 App（且 7 天内最多注册 10 个 App ID）。删掉手机上其他不用的免费自签 App，或换一个空闲小号 Apple ID 签名即可。
+普通免费 Apple ID 同一台手机最多装 3 个自签 App（7 天内最多注册 10 个 App ID）。卸掉不用的其他自签 App，或换一个空闲小号 Apple ID 签名即可。
 </details>
 
 <details>
-<summary><b>Q3: 为什么我以前直接锁屏会失效，现在锁屏可以了？</b></summary>
+<summary><b>Q3: iPhone 识别验证码准不准？和电脑端一样吗？</b></summary>
 
-早期版本未开启后台保活时，锁屏 30 秒后会被 iOS 冻结进程。当前 Release 里的 `LNU-LibSeat-iOS-arm64-unsigned.ipa` 已内置**锁屏后台静音保活 + 纯 CPU 验证码解码**，启动定时看到日志 `🌙 已激活 iOS 锁屏后台保活` 即可锁屏等待。如果遇到极度重要的抢座日（如期末周），仍建议开启 **「夜守」** 插电不锁屏作为 100% 保险。
-</details>
-
-<details>
-<summary><b>Q4: iPhone 上的验证码识别成功率和电脑端一样吗？</b></summary>
-
-**基本一致。** iPhone 安装包完整内置了与电脑端相同的 **5 个原版无损 FP32 / INT8 ONNX 模型**，以及逐像素对齐 Python Pillow 的重采样与灰度算法，全部在手机本地离线推理，无需任何云端打码服务。
-</details>
-
-<details>
-<summary><b>Q5: Sideloadly / 爱思助手需要输入 Apple ID 密码安全吗？</b></summary>
-
-侧载工具需要向苹果官方服务器申请你个人的免费 7 天开发证书，因此需要 Apple ID 验证。如果介意主账号隐私，最简单的做法是**花 1 分钟在苹果官网注册一个全新的空白小号 Apple ID 专门用来签名**，安全又省心。
+基本一致。安装包内置了与电脑端完全相同的 5 个原版无损 ONNX 模型，图像重采样与灰度算法也和 Python Pillow 逐字节对齐，全部在本地离线推理。
 </details>

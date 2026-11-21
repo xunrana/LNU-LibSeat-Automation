@@ -1,20 +1,12 @@
-<div align="center">
+# 架构与开发文档
 
-# 🏗️ 全仓架构与开发文档
+LNU-LibSeat v6.0.0 桌面端（Python）+ 移动端（Flutter）双端同源纯 HTTP API 架构说明。
 
-### LNU-LibSeat v6.0.0 — 桌面端（Python）+ 移动端（Flutter）双端同源纯 HTTP API 架构
-
-[← 返回 README](../README.md) ·
-[纯 API 协议契约](API_PROTOCOL_CONTRACT.md) ·
-[移动端技术架构与构建](MOBILE_GUIDE.md) ·
-[验证码识别引擎](CAPTCHA_YOLO4_SIAMESE.md) ·
-[v6.0.0 发布说明](RELEASE_NOTES_V6.md)
-
-</div>
+[← 返回首页](../README.md) · [纯 API 协议契约](API_PROTOCOL_CONTRACT.md) · [移动端架构与构建](MOBILE_GUIDE.md) · [验证码引擎](CAPTCHA_YOLO4_SIAMESE.md) · [v6.0.0 更新说明](RELEASE_NOTES_V6.md)
 
 ---
 
-## 📑 目录
+## 目录
 
 - [v6.0.0 架构跃迁](#v600-架构跃迁)
 - [全仓双端架构总览](#全仓双端架构总览)

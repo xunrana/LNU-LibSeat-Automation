@@ -248,31 +248,43 @@ class MobileRushController extends ChangeNotifier {
         sessionCfg.scheduleHour,
         sessionCfg.scheduleMinute,
       );
-      final startedGuard = await BackgroundSchedulerService.instance
+      final guardRes = await BackgroundSchedulerService.instance
           .startAndroidForegroundRushService(
         prepAtBeijing: sched.prepAt,
         fireAtBeijing: sched.fireAt,
         targetSummary:
             '${sessionCfg.targetRoom} · ${formatHms(sched.fireAt)} 准点晨约',
       );
-      if (startedGuard) {
+      if (guardRes.ok) {
         final wakeAt = sched.prepAt.subtract(const Duration(seconds: 20));
+        final fgsDesc = guardRes.fgsStarted
+            ? '前台守夜已挂起'
+            : '前台服务降级(${guardRes.fgsMessage})';
+        final alarmDesc = guardRes.alarmScheduled
+            ? '${guardRes.alarmMode}(${formatHms(wakeAt)}/${formatHms(sched.prepAt)})'
+            : '未挂闹钟(${guardRes.alarmMode})';
         appendLog(
           'system',
-          '🛡️ 隔夜防杀守夜已启用：AlarmClock 闹钟(${formatHms(wakeAt)}) + 动态唤醒锁 + WiFi保活锁',
+          '🛡️ 隔夜防杀实况：$fgsDesc · 唤醒闹钟=$alarmDesc · 动态锁+WiFi锁',
         );
         final status = await BackgroundSchedulerService.instance
             .getAndroidKeepAliveStatus();
         if (!status.ignoringBatteryOptimizations) {
           appendLog(
             'system',
-            '💡 建议前往「我的 → 晨约守夜与后台保活」开启电池优化白名单，防国产手机夜间强杀',
+            '⚠️ 未开启「允许后台高耗电/电池白名单」：vivo(OriginOS)/小米/华为/OPPO 锁屏后将冻结后台计时，请前往「我的 → 晨约守夜与后台保活」开启',
           );
         }
         if (!status.canScheduleExactAlarms) {
           appendLog(
             'system',
             '⚠️ 尚未授予精确闹钟权限，建议前往「我的 → 晨约守夜与后台保活」一键授权',
+          );
+        }
+        if (!status.canUseFullScreenIntent) {
+          appendLog(
+            'system',
+            '💡 建议开启「锁屏全屏唤醒(Android 14+)」，确保锁屏冻结态可准点拉起解冻',
           );
         }
       }

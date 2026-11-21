@@ -1206,6 +1206,36 @@ class _KeepAliveGuidePageState extends State<_KeepAliveGuidePage>
                     onTap: () => BackgroundSchedulerService.instance
                         .openAppNotificationSettings(),
                   ),
+                  const Divider(height: 1, indent: 52),
+                  ListTile(
+                    leading: const Icon(
+                      Icons.fullscreen_rounded,
+                      color: LnuColors.ink,
+                    ),
+                    title: const Text('锁屏全屏唤醒权限（Android 14+）'),
+                    subtitle: const Text('允许准点闹钟穿透锁屏直接拉起解冻抢座引擎'),
+                    trailing: _statusChip(
+                      _status.canUseFullScreenIntent,
+                      '已开启',
+                      '去开启',
+                    ),
+                    onTap: () => BackgroundSchedulerService.instance
+                        .requestFullScreenIntentPermission(),
+                  ),
+                  const Divider(height: 1, indent: 52),
+                  ListTile(
+                    leading: const Icon(
+                      Icons.tune_rounded,
+                      color: LnuColors.amberDeep,
+                    ),
+                    title: const Text('vivo / 小米 / 华为 / OPPO 专属保活项'),
+                    subtitle: const Text(
+                      '必开：允许后台高耗电 + 自启动 + 后台弹出界面 + 锁屏显示（点此直达应用信息）',
+                    ),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => BackgroundSchedulerService.instance
+                        .openAppDetailsSettings(),
+                  ),
                 ],
               ),
             ),

@@ -10,11 +10,13 @@
 library;
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../../logic/orchestrator.dart';
+import '../../services/background_scheduler.dart';
 import '../../services/config_store.dart';
 import '../../services/rush_controller.dart';
 import '../theme/app_theme.dart';
@@ -181,7 +183,9 @@ class _HomeRushScreenState extends State<HomeRushScreen> {
                               : (cfg.scheduledMode
                                   ? '开  启  晨  约   →'
                                   : '立  即  约  座   →'),
-                          onPressed: ctrl.isRunning ? null : () => ctrl.startRush(),
+                          onPressed: ctrl.isRunning
+                              ? null
+                              : () => _handleStartRushTap(context, ctrl, cfg),
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -233,6 +237,54 @@ class _HomeRushScreenState extends State<HomeRushScreen> {
         );
       },
     );
+  }
+
+  Future<void> _handleStartRushTap(
+    BuildContext context,
+    MobileRushController ctrl,
+    MobileConfigStore cfg,
+  ) async {
+    if (Platform.isAndroid && cfg.scheduledMode) {
+      final st =
+          await BackgroundSchedulerService.instance.getAndroidKeepAliveStatus();
+      if (context.mounted && !st.ignoringBatteryOptimizations) {
+        final action = await showDialog<String>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: LnuColors.card,
+            title: Text(
+              '请先开启后台高耗电 / 电池白名单',
+              style: LnuTheme.serif(16.5, weight: FontWeight.w700),
+            ),
+            content: const Text(
+              '检测到本机尚未放行后台电池优化。\n\n'
+              'vivo (OriginOS) / 小米 / 华为 / OPPO 在锁屏后会立即触发「墓碑冻结」，导致定时抢座在锁屏期间暂停。\n\n'
+              '建议先点下方按钮设为「允许后台高耗电 / 无限制」，并在应用权限里打开「自启动」「后台弹出界面」「锁屏显示」。',
+              style: TextStyle(height: 1.55, fontSize: 13),
+            ),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop('start'),
+                child: const Text('仍直接开始'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(ctx).pop('whitelist'),
+                child: const Text('去开启白名单'),
+              ),
+            ],
+          ),
+        );
+        if (action == 'whitelist') {
+          await BackgroundSchedulerService.instance
+              .requestIgnoreBatteryOptimizations();
+          return;
+        }
+        if (action != 'start') {
+          return;
+        }
+      }
+    }
+    await ctrl.startRush();
   }
 
   Widget _buildPresetStrip(

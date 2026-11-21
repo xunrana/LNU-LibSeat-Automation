@@ -1,5 +1,6 @@
 package com.xunrana.lnulibseat
 
+import android.app.ActivityOptions
 import android.app.AlarmManager
 import android.app.Notification
 import android.app.NotificationChannel
@@ -35,9 +36,11 @@ object RushAlarmStore {
     private const val KEY_FIRED_MS = "fired_epoch_ms"
 
     const val ALARM_REQUEST_CODE = 630
+    const val ALARM_BACKUP_REQUEST_CODE = 631
     const val WAKEUP_NOTIF_ID = 6301
     const val WAKEUP_CHANNEL_ID = "lnu_libseat_rush_wakeup"
     const val EXTRA_FROM_EXACT_ALARM = "from_exact_alarm"
+    const val EXTRA_IS_PREP_NUDGE = "is_prep_nudge"
     const val EXTRA_SUMMARY = "summary"
     const val EXTRA_FIRE_AT_MS = "fire_at_epoch_ms"
 
@@ -111,13 +114,21 @@ object RushAlarmStore {
 
     /**
      * 使用系统最高优先级 AlarmClock 闹钟调度（与系统闹钟同级，穿透国产 ROM 夜间深度休眠与省电冻结）。
+     * 若提供了 prepAtEpochMs（比首次唤醒晚 20s，即预热登录时刻），同时挂载第二道准点轻推闹钟防再次冻结。
+     * 返回 Pair(是否成功, 实际调度模式或错误说明)。
      */
-    fun scheduleRushAlarmClock(context: Context, triggerAtEpochMs: Long): Boolean {
-        if (triggerAtEpochMs <= System.currentTimeMillis()) {
-            return false
+    fun scheduleRushAlarmClock(
+        context: Context,
+        triggerAtEpochMs: Long,
+        prepAtEpochMs: Long = 0L
+    ): Pair<Boolean, String> {
+        val nowMs = System.currentTimeMillis()
+        if (triggerAtEpochMs <= nowMs && prepAtEpochMs <= nowMs) {
+            return Pair(false, "trigger_in_past")
         }
         val appCtx = context.applicationContext
         val alarmManager = appCtx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val effectivePrimary = if (triggerAtEpochMs > nowMs) triggerAtEpochMs else prepAtEpochMs
         val alarmIntent = Intent(appCtx, RushAlarmReceiver::class.java)
         val pending = PendingIntent.getBroadcast(
             appCtx,
@@ -130,7 +141,7 @@ object RushAlarmStore {
         }
         val showPending = PendingIntent.getActivity(
             appCtx,
-            ALARM_REQUEST_CODE + 1,
+            ALARM_REQUEST_CODE + 2,
             showIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
@@ -139,66 +150,103 @@ object RushAlarmStore {
         } else {
             true
         }
-        return try {
+        val primaryRes = try {
             if (canExact && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 alarmManager.setAlarmClock(
-                    AlarmManager.AlarmClockInfo(triggerAtEpochMs, showPending),
+                    AlarmManager.AlarmClockInfo(effectivePrimary, showPending),
                     pending
                 )
+                Pair(true, "AlarmClock")
             } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 alarmManager.setAndAllowWhileIdle(
                     AlarmManager.RTC_WAKEUP,
-                    triggerAtEpochMs,
+                    effectivePrimary,
                     pending
                 )
+                Pair(true, "InexactIdle")
             } else {
-                alarmManager.setExact(AlarmManager.RTC_WAKEUP, triggerAtEpochMs, pending)
+                alarmManager.setExact(AlarmManager.RTC_WAKEUP, effectivePrimary, pending)
+                Pair(true, "ExactLegacy")
             }
-            true
-        } catch (_: SecurityException) {
+        } catch (se: SecurityException) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 alarmManager.setAndAllowWhileIdle(
                     AlarmManager.RTC_WAKEUP,
-                    triggerAtEpochMs,
+                    effectivePrimary,
                     pending
                 )
+                Pair(true, "FallbackInexact(${se.javaClass.simpleName})")
             } else {
-                alarmManager.set(AlarmManager.RTC_WAKEUP, triggerAtEpochMs, pending)
+                alarmManager.set(AlarmManager.RTC_WAKEUP, effectivePrimary, pending)
+                Pair(true, "FallbackLegacy")
             }
-            true
+        } catch (exc: Exception) {
+            Pair(false, exc.message ?: exc.javaClass.simpleName)
         }
+
+        // 第二道准点轻推闹钟（在 prepAt 时刻再次补唤醒 CPU，防首闹钟后 20s 内被 OEM 二次冻结）
+        if (prepAtEpochMs > effectivePrimary + 3_000L) {
+            try {
+                val backupIntent = Intent(appCtx, RushAlarmReceiver::class.java).apply {
+                    putExtra(EXTRA_IS_PREP_NUDGE, true)
+                }
+                val backupPending = PendingIntent.getBroadcast(
+                    appCtx,
+                    ALARM_BACKUP_REQUEST_CODE,
+                    backupIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                if (canExact && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    alarmManager.setExactAndAllowWhileIdle(
+                        AlarmManager.RTC_WAKEUP,
+                        prepAtEpochMs,
+                        backupPending
+                    )
+                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    alarmManager.setAndAllowWhileIdle(
+                        AlarmManager.RTC_WAKEUP,
+                        prepAtEpochMs,
+                        backupPending
+                    )
+                }
+            } catch (_: Exception) {}
+        }
+        return primaryRes
     }
 
     fun cancelRushAlarmClock(context: Context) {
         val appCtx = context.applicationContext
         val alarmManager = appCtx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val alarmIntent = Intent(appCtx, RushAlarmReceiver::class.java)
-        val pending = PendingIntent.getBroadcast(
-            appCtx,
-            ALARM_REQUEST_CODE,
-            alarmIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        alarmManager.cancel(pending)
-        pending.cancel()
+        for (reqCode in intArrayOf(ALARM_REQUEST_CODE, ALARM_BACKUP_REQUEST_CODE)) {
+            val alarmIntent = Intent(appCtx, RushAlarmReceiver::class.java)
+            val pending = PendingIntent.getBroadcast(
+                appCtx,
+                reqCode,
+                alarmIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            alarmManager.cancel(pending)
+            pending.cancel()
+        }
         val nm = appCtx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         nm.cancel(WAKEUP_NOTIF_ID)
     }
 
-    fun startForegroundGuard(context: Context, summary: String, fireAtEpochMs: Long) {
+    fun startForegroundGuard(context: Context, summary: String, fireAtEpochMs: Long): Pair<Boolean, String> {
         val appCtx = context.applicationContext
         val serviceIntent = Intent(appCtx, RushForegroundService::class.java).apply {
             putExtra(EXTRA_SUMMARY, summary)
             putExtra(EXTRA_FIRE_AT_MS, fireAtEpochMs)
         }
-        try {
+        return try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 appCtx.startForegroundService(serviceIntent)
             } else {
                 appCtx.startService(serviceIntent)
             }
-        } catch (_: Exception) {
-            // 极端后台限制下静默降级，仍由 AlarmClock 兜底拉起
+            Pair(true, "ok")
+        } catch (exc: Exception) {
+            Pair(false, exc.message ?: exc.javaClass.simpleName)
         }
     }
 }
@@ -206,10 +254,21 @@ object RushAlarmStore {
 class MainActivity : FlutterActivity() {
     companion object {
         private const val CHANNEL_NAME = "com.xunrana.lnulibseat/background"
-        var activeChannel: MethodChannel? = null
+        @Volatile var activeChannel: MethodChannel? = null
+        @Volatile var isActivityResumed: Boolean = false
     }
 
     private var boundChannel: MethodChannel? = null
+
+    override fun onResume() {
+        super.onResume()
+        isActivityResumed = true
+    }
+
+    override fun onPause() {
+        isActivityResumed = false
+        super.onPause()
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -221,11 +280,19 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
                 "startForegroundRushService" -> {
                     val triggerAtEpochMs = call.argument<Number>("triggerAtEpochMs")?.toLong() ?: 0L
-                    val fireAtEpochMs = call.argument<Number>("fireAtEpochMs")?.toLong()
+                    val prepAtEpochMs = call.argument<Number>("prepAtEpochMs")?.toLong()
                         ?: (triggerAtEpochMs + 20_000L)
+                    val fireAtEpochMs = call.argument<Number>("fireAtEpochMs")?.toLong()
+                        ?: (prepAtEpochMs + 15_000L)
                     val summary = call.argument<String>("summary") ?: "06:30 准点抢座守夜中"
-                    startRushServiceAndAlarm(triggerAtEpochMs, fireAtEpochMs, summary)
-                    result.success(true)
+                    result.success(
+                        startRushServiceAndAlarm(
+                            triggerAtEpochMs,
+                            prepAtEpochMs,
+                            fireAtEpochMs,
+                            summary
+                        )
+                    )
                 }
                 "stopForegroundRushService" -> {
                     stopRushServiceAndAlarm()
@@ -247,6 +314,14 @@ class MainActivity : FlutterActivity() {
                 }
                 "openAppNotificationSettings" -> {
                     openNotificationSettings()
+                    result.success(null)
+                }
+                "openAppDetailsSettings" -> {
+                    openAppDetailsPage()
+                    result.success(null)
+                }
+                "requestFullScreenIntentPermission" -> {
+                    requestFullScreenIntentSettings()
                     result.success(null)
                 }
                 "decodeImageRgba" -> {
@@ -326,14 +401,27 @@ class MainActivity : FlutterActivity() {
 
     private fun startRushServiceAndAlarm(
         triggerAtEpochMs: Long,
+        prepAtEpochMs: Long,
         fireAtEpochMs: Long,
         summary: String
-    ) {
+    ): Map<String, Any> {
         RushAlarmStore.saveArmed(this, triggerAtEpochMs, fireAtEpochMs, summary)
-        RushAlarmStore.startForegroundGuard(this, summary, fireAtEpochMs)
-        if (triggerAtEpochMs > System.currentTimeMillis()) {
-            RushAlarmStore.scheduleRushAlarmClock(this, triggerAtEpochMs)
+        val (fgsOk, fgsMsg) = RushAlarmStore.startForegroundGuard(this, summary, fireAtEpochMs)
+        var alarmOk = false
+        var alarmMode = "not_needed"
+        val nowMs = System.currentTimeMillis()
+        if (triggerAtEpochMs > nowMs || prepAtEpochMs > nowMs) {
+            val res = RushAlarmStore.scheduleRushAlarmClock(this, triggerAtEpochMs, prepAtEpochMs)
+            alarmOk = res.first
+            alarmMode = res.second
         }
+        return hashMapOf<String, Any>(
+            "ok" to (fgsOk || alarmOk),
+            "fgsStarted" to fgsOk,
+            "fgsMessage" to fgsMsg,
+            "alarmScheduled" to alarmOk,
+            "alarmMode" to alarmMode
+        )
     }
 
     private fun stopRushServiceAndAlarm() {
@@ -361,11 +449,21 @@ class MainActivity : FlutterActivity() {
         } else {
             true
         }
+        val canFullScreen = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            try {
+                nm.canUseFullScreenIntent()
+            } catch (_: Exception) {
+                true
+            }
+        } else {
+            true
+        }
         val state = RushAlarmStore.readState(this)
         return hashMapOf<String, Any>(
             "ignoringBatteryOptimizations" to ignoringBattery,
             "canScheduleExactAlarms" to canExact,
             "notificationsEnabled" to notifEnabled,
+            "canUseFullScreenIntent" to canFullScreen,
             "armed" to (state["armed"] as? Boolean ?: false),
             "fireAtEpochMs" to (state["fireAtEpochMs"] as? Long ?: 0L)
         )
@@ -427,6 +525,28 @@ class MainActivity : FlutterActivity() {
             }
             startActivity(intent)
         } catch (_: Exception) {}
+    }
+
+    private fun openAppDetailsPage() {
+        try {
+            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.parse("package:$packageName")
+            }
+            startActivity(intent)
+        } catch (_: Exception) {}
+    }
+
+    private fun requestFullScreenIntentSettings() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            try {
+                val intent = Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT).apply {
+                    data = Uri.parse("package:$packageName")
+                }
+                startActivity(intent)
+                return
+            } catch (_: Exception) {}
+        }
+        openAppDetailsPage()
     }
 
     /**
@@ -561,13 +681,17 @@ class RushForegroundService : Service() {
             ?.takeIf { it > 0L }
             ?: (persisted["fireAtEpochMs"] as? Long ?: 0L)
 
-        val channelId = "lnu_libseat_foreground_guard"
+        val channelId = "lnu_libseat_foreground_guard_v2"
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 channelId,
-                "LNU-LibSeat 定时守夜服务",
-                NotificationManager.IMPORTANCE_LOW
-            )
+                "LNU-LibSeat 隔夜守夜服务",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "保持 06:30 准点抢座进程与网络连接活跃"
+                setSound(null, null)
+                enableVibration(false)
+            }
             val nm = getSystemService(NotificationManager::class.java)
             nm.createNotificationChannel(channel)
         }
@@ -683,24 +807,57 @@ class RushAlarmReceiver : BroadcastReceiver() {
 
         RushAlarmStore.startForegroundGuard(context, summary, fireAtEpochMs)
 
-        // 2. 若 Flutter 引擎仍在存活，直接通过 MethodChannel 唤醒；
-        //    若夜间进程曾被国产系统强杀（activeChannel == null），则标记待续抢并自动拉起 MainActivity！
+        // 2. 关键修复（针对 vivo OriginOS / 小米 / OPPO Android 14 墓碑冻结机制）：
+        //    当手机锁屏或 App 在后台时，进程可能处于「未死但被 Linux cgroup 冻结」状态，此时 activeChannel 非空但 Dart 引擎已被暂停！
+        //    因此只要屏幕处于熄灭或界面不在前台，无论进程是被杀还是被冻结，都必须主动拉起 MainActivity + fullScreenIntent 解冻！
         val channel = MainActivity.activeChannel
+        val isScreenOn = try {
+            pm.isInteractive
+        } catch (_: Exception) {
+            false
+        }
+        val needSurfaceWakeup = channel == null || !MainActivity.isActivityResumed || !isScreenOn
+
         if (channel != null) {
             channel.invokeMethod("onAlarmFired", "exact_alarm_wake")
         } else {
             RushAlarmStore.markColdStartTriggered(context)
+        }
+
+        if (needSurfaceWakeup) {
             val launchIntent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or
                     Intent.FLAG_ACTIVITY_SINGLE_TOP or
                     Intent.FLAG_ACTIVITY_CLEAR_TOP
                 putExtra(RushAlarmStore.EXTRA_FROM_EXACT_ALARM, true)
             }
-            try {
-                context.startActivity(launchIntent)
-            } catch (_: Exception) {}
+            val fullPending = PendingIntent.getActivity(
+                context,
+                RushAlarmStore.WAKEUP_NOTIF_ID,
+                launchIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            // Android 14+ BAL 合规拉起：优先通过允许后台启动的 PendingIntent 拉起 MainActivity，失败回退 startActivity
+            var launched = false
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                try {
+                    @Suppress("DEPRECATION")
+                    val opts = ActivityOptions.makeBasic()
+                        .setPendingIntentBackgroundActivityStartMode(
+                            ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+                        )
+                        .toBundle()
+                    fullPending.send(context, 0, null, null, null, null, opts)
+                    launched = true
+                } catch (_: Exception) {}
+            }
+            if (!launched) {
+                try {
+                    context.startActivity(launchIntent)
+                } catch (_: Exception) {}
+            }
 
-            // Android 14/15/16 锁屏兜底：同步发一条 fullScreenIntent 高优唤醒通知，确保能穿透锁屏拉起界面
+            // Android 14/15/16 锁屏穿透兜底：同步发 fullScreenIntent 高优唤醒通知，强制解冻前台 Activity 与 Dart Isolate
             try {
                 val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -709,16 +866,10 @@ class RushAlarmReceiver : BroadcastReceiver() {
                         "LNU-LibSeat 准点闹钟唤醒",
                         NotificationManager.IMPORTANCE_HIGH
                     ).apply {
-                        description = "06:30 准点抢座前自动唤醒应用执行"
+                        description = "06:30 准点抢座前自动唤醒并解冻应用执行"
                     }
                     nm.createNotificationChannel(ch)
                 }
-                val fullPending = PendingIntent.getActivity(
-                    context,
-                    RushAlarmStore.WAKEUP_NOTIF_ID,
-                    launchIntent,
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                )
                 val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     Notification.Builder(context, RushAlarmStore.WAKEUP_CHANNEL_ID)
                 } else {
@@ -756,7 +907,8 @@ class RushBootReceiver : BroadcastReceiver() {
             return
         }
         val effectiveTrigger = if (triggerMs > nowMs) triggerMs else nowMs + 5_000L
-        RushAlarmStore.scheduleRushAlarmClock(context, effectiveTrigger)
+        val prepMs = (fireMs - 15_000L).coerceAtLeast(0L)
+        RushAlarmStore.scheduleRushAlarmClock(context, effectiveTrigger, prepMs)
     }
 }
 

@@ -19,10 +19,27 @@ enum PendingRushAction {
   fireImmediately,
 }
 
+class ForegroundGuardStartResult {
+  final bool ok;
+  final bool fgsStarted;
+  final String fgsMessage;
+  final bool alarmScheduled;
+  final String alarmMode;
+
+  const ForegroundGuardStartResult({
+    this.ok = false,
+    this.fgsStarted = false,
+    this.fgsMessage = '',
+    this.alarmScheduled = false,
+    this.alarmMode = '',
+  });
+}
+
 class AndroidKeepAliveStatus {
   final bool ignoringBatteryOptimizations;
   final bool canScheduleExactAlarms;
   final bool notificationsEnabled;
+  final bool canUseFullScreenIntent;
   final bool armed;
   final int fireAtEpochMs;
 
@@ -30,6 +47,7 @@ class AndroidKeepAliveStatus {
     this.ignoringBatteryOptimizations = true,
     this.canScheduleExactAlarms = true,
     this.notificationsEnabled = true,
+    this.canUseFullScreenIntent = true,
     this.armed = false,
     this.fireAtEpochMs = 0,
   });
@@ -37,7 +55,8 @@ class AndroidKeepAliveStatus {
   bool get allReady =>
       ignoringBatteryOptimizations &&
       canScheduleExactAlarms &&
-      notificationsEnabled;
+      notificationsEnabled &&
+      canUseFullScreenIntent;
 }
 
 /// 纯函数：根据原生持久化守夜状态，决定冷启动 / 闹钟唤醒后的接力动作。
@@ -108,15 +127,15 @@ class BackgroundSchedulerService {
     } catch (_) {}
   }
 
-  /// Android 专属：启动隔夜前台常驻守夜服务（动态 24h WakeLock + WifiLock）
-  /// 并注册系统最高优先级 AlarmClock 唤醒闹钟（提前 prepAt 20 秒唤醒，给冷启动留足加载时间）。
-  Future<bool> startAndroidForegroundRushService({
+  /// Android 专属：启动隔夜前台常驻守夜服务（动态 26h WakeLock + WifiLock）
+  /// 并注册系统最高优先级 AlarmClock 唤醒闹钟（提前 prepAt 20 秒唤醒，给冷启动/解冻留足加载时间）。
+  Future<ForegroundGuardStartResult> startAndroidForegroundRushService({
     required DateTime prepAtBeijing,
     DateTime? fireAtBeijing,
     required String targetSummary,
   }) async {
     if (!Platform.isAndroid) {
-      return false;
+      return const ForegroundGuardStartResult();
     }
     try {
       final wakeBj = prepAtBeijing.subtract(const Duration(seconds: 20));
@@ -125,20 +144,44 @@ class BackgroundSchedulerService {
       final triggerEpochMs = wakeBj
           .subtract(const Duration(hours: 8))
           .millisecondsSinceEpoch;
+      final prepEpochMs = prepAtBeijing
+          .subtract(const Duration(hours: 8))
+          .millisecondsSinceEpoch;
       final fireEpochMs = fireBj
           .subtract(const Duration(hours: 8))
           .millisecondsSinceEpoch;
-      final ok = await _channel.invokeMethod<bool>(
+      final raw = await _channel.invokeMethod<dynamic>(
         'startForegroundRushService',
         <String, dynamic>{
           'triggerAtEpochMs': triggerEpochMs,
+          'prepAtEpochMs': prepEpochMs,
           'fireAtEpochMs': fireEpochMs,
           'summary': targetSummary,
         },
       );
-      return ok ?? false;
-    } catch (_) {
-      return false;
+      if (raw is Map) {
+        return ForegroundGuardStartResult(
+          ok: raw['ok'] == true,
+          fgsStarted: raw['fgsStarted'] == true,
+          fgsMessage: (raw['fgsMessage'] ?? '').toString(),
+          alarmScheduled: raw['alarmScheduled'] == true,
+          alarmMode: (raw['alarmMode'] ?? '').toString(),
+        );
+      }
+      if (raw == true) {
+        return const ForegroundGuardStartResult(
+          ok: true,
+          fgsStarted: true,
+          alarmScheduled: true,
+          alarmMode: 'AlarmClock',
+        );
+      }
+      return const ForegroundGuardStartResult();
+    } catch (exc) {
+      return ForegroundGuardStartResult(
+        ok: false,
+        fgsMessage: '$exc',
+      );
     }
   }
 
@@ -183,6 +226,7 @@ class BackgroundSchedulerService {
             raw['ignoringBatteryOptimizations'] == true,
         canScheduleExactAlarms: raw['canScheduleExactAlarms'] == true,
         notificationsEnabled: raw['notificationsEnabled'] == true,
+        canUseFullScreenIntent: raw['canUseFullScreenIntent'] != false,
         armed: raw['armed'] == true,
         fireAtEpochMs: (raw['fireAtEpochMs'] as num?)?.toInt() ?? 0,
       );
@@ -228,6 +272,26 @@ class BackgroundSchedulerService {
     }
     try {
       await _channel.invokeMethod<void>('openAppNotificationSettings');
+    } catch (_) {}
+  }
+
+  /// Android 专属：打开应用信息详情页（方便 vivo/小米/华为/OPPO 开启「自启动」「后台弹出界面」「锁屏显示」）。
+  Future<void> openAppDetailsSettings() async {
+    if (!Platform.isAndroid) {
+      return;
+    }
+    try {
+      await _channel.invokeMethod<void>('openAppDetailsSettings');
+    } catch (_) {}
+  }
+
+  /// Android 14+ 专属：打开全屏锁屏通知授权页（允许闹钟到点亮屏解冻）。
+  Future<void> requestFullScreenIntentPermission() async {
+    if (!Platform.isAndroid) {
+      return;
+    }
+    try {
+      await _channel.invokeMethod<void>('requestFullScreenIntentPermission');
     } catch (_) {}
   }
 }

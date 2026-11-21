@@ -76,3 +76,19 @@ def test_notify_booking_success_dispatches_both_channels():
         assert res == {"email": True, "webhook": True}
         mock_email.assert_called_once()
         mock_wh.assert_called_once()
+
+
+def test_send_email_falls_back_to_builtin_sender_when_receiver_blank(monkeypatch):
+    import config
+
+    monkeypatch.setattr(config, "SMTP_USER", "", raising=False)
+    monkeypatch.setattr(config, "SMTP_PASS", "", raising=False)
+    monkeypatch.setattr(config, "RECEIVER_EMAIL", "   ", raising=False)
+
+    fake_smtp = mock.MagicMock()
+    with mock.patch("core.notifications.smtplib.SMTP_SSL", return_value=fake_smtp):
+        assert notifications.send_email("标题", "内容") is True
+        fake_smtp.sendmail.assert_called_once()
+        sender_arg, receiver_arg, _ = fake_smtp.sendmail.call_args[0]
+        assert sender_arg == "lnu_libseat_bot@126.com"
+        assert receiver_arg == "lnu_libseat_bot@126.com"

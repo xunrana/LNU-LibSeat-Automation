@@ -141,7 +141,7 @@ def send_email(title: str, content: str = "") -> bool:
     """
     import config as _cfg
     _SMTP_USER, _SMTP_PASS = _get_smtp_creds()
-    receiver = getattr(_cfg, "RECEIVER_EMAIL", "") or _SMTP_USER
+    receiver = (getattr(_cfg, "RECEIVER_EMAIL", "") or "").strip() or _SMTP_USER
 
     if not _SMTP_USER or not _SMTP_PASS:
         logger.warning("SMTP credentials not configured; Email disabled")

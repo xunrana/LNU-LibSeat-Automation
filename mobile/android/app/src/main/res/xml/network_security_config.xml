@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- 辽宁大学图书馆预约系统 (http://libseat.lnu.edu.cn) 使用 HTTP 明文协议，必须显式放行 -->
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">libseat.lnu.edu.cn</domain>
+        <domain includeSubdomains="true">lnu.edu.cn</domain>
+    </domain-config>
+</network-security-config>

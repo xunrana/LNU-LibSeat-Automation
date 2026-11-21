@@ -78,3 +78,19 @@ test_rush_booking.py
 # Editor / AI tools
 .omc/
 .antigravitycli/
+
+# Flutter Mobile generated assets & build caches (models are generated from core/checkpoints via scripts/prepare_mobile_assets.py)
+mobile/.dart_tool/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/.packages
+mobile/build/
+mobile/ios/Pods/
+mobile/ios/.symlinks/
+mobile/ios/Flutter/ephemeral/
+mobile/android/.gradle/
+mobile/android/local.properties
+mobile/assets/models/*.onnx
+mobile/assets/models/manifest.json
+.build_stage_ios/
+

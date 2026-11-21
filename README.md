@@ -11,15 +11,16 @@
 
 <h1 align="left">LNU-LibSeat</h1>
 
-<h3 align="left">🎯 辽宁大学图书馆 · 智能抢座神器 · v6.0.0</h3>
+<h3 align="left">🎯 辽宁大学图书馆 · 智能抢座神器（Win / Mac / iOS / Android）</h3>
 
-<p align="left"><strong>纯 API 毫秒级直连 · 彻底告别浏览器 · 自研 AI 识别 · 邮件 & 手机秒达战报</strong></p>
+<p align="left"><strong>纯 API 毫秒级直连 · 彻底告别浏览器 · 端侧自研 ONNX 识别 · 桌面端 & 手机独立版全平台覆盖</strong></p>
 
 <p align="left">
+<a href="mobile/README.md"><img src="https://img.shields.io/badge/Mobile%20App-iOS%20%26%20Android-000000?logo=apple&logoColor=white" alt="Mobile App"></a>
 <a href="https://python.org"><img src="https://img.shields.io/badge/Python-3.10+-blue?logo=python&logoColor=white" alt="Python"></a>
 <a href="https://doc.qt.io/qtforpython-6/"><img src="https://img.shields.io/badge/PySide6-6.7+-41CD22?logo=qt&logoColor=white" alt="PySide6"></a>
+<a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-Mobile-02569B?logo=flutter&logoColor=white" alt="Flutter"></a>
 <a href="https://onnxruntime.ai/"><img src="https://img.shields.io/badge/ONNX-Runtime-005CED?logo=onnx&logoColor=white" alt="ONNX Runtime"></a>
-<a href="https://requests.readthedocs.io/"><img src="https://img.shields.io/badge/Engine-Pure%20HTTP%20API-FF6B35" alt="Pure API"></a>
 <a href="https://github.com/XUNRANA/LNU-LibSeat-Automation/actions/workflows/ci.yml"><img src="https://github.com/XUNRANA/LNU-LibSeat-Automation/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 <a href="https://github.com/XUNRANA/LNU-LibSeat-Automation/releases/latest"><img src="https://img.shields.io/github/v/release/XUNRANA/LNU-LibSeat-Automation?label=Release&color=indigo" alt="Release"></a>
 <a href="#-免责声明"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License"></a>
@@ -32,8 +33,8 @@
 <tr>
 <td align="center" width="250" height="160"><h1>⚡</h1><b>0.55s</b> 实测抢座核心<br>纯 API 零浏览器依赖</td>
 <td align="center" width="250" height="160"><h1>🧠</h1>自研 YOLOv8+Siamese<br>Click1/Click3 自适应识别</td>
-<td align="center" width="250" height="160"><h1>🎯</h1>实时空座精准筛查<br>支持多自习室兜底</td>
-<td align="center" width="250" height="160"><h1>0 元</h1>本地离线零成本<br>邮件 + 手机 Webhook 秒推</td>
+<td align="center" width="250" height="160"><h1>📱</h1><b>iOS & Android 独立版</b><br>脱离电脑 · 锁屏保活准点抢</td>
+<td align="center" width="250" height="160"><h1>0 元</h1>本地离线零成本<br>邮件 + 推送 + 签到防违约</td>
 </tr>
 </table>
 
@@ -42,8 +43,9 @@
 ---
 
 > [!IMPORTANT]
-> ✨ **v6.0.0 重磅架构升级！** 彻底移除 Selenium / Chromium / WebDriver，全面切换为 **纯 HTTP API 直连引擎**——实测核心下单 **0.55 秒**，告别浏览器版本匹配与 1.5GB 内存占用！
-> 详见 [v6.0.0 发布说明](docs/RELEASE_NOTES_V6.md) · 老用户必看 [v5 → v6 升级指南](docs/MIGRATION_V5_TO_V6.md)。
+> ✨ **纯 HTTP API 直连引擎 + 手机独立版（iOS & Android）现已上线！**
+> - 💻 **电脑桌面端（Windows / macOS）**：彻底移除 Selenium / 浏览器依赖，实测核心下单 **0.55 秒**。详见 [v6.0.0 发布说明](docs/RELEASE_NOTES_V6.md) · [v5 → v6 升级指南](docs/MIGRATION_V5_TO_V6.md)。
+> - 📱 **手机独立版（iOS & Android）**：100% 脱离电脑、内置 5 个原版无损 ONNX 模型、支持全馆实时余座雷达与双端锁屏保活！详见 **[📱 手机独立版 README](mobile/README.md)** · **[🍎 iOS 零元免费安装教程](docs/IOS_INSTALL_GUIDE.md)**。
 
 > [!WARNING]
 > 🛡️ **准时到馆签到！** 连续或 7 天内累计 **3 次违约 = 黑名单 7 天**，期间无法预约。
@@ -144,6 +146,41 @@ Mac 双击不了 `.exe`，请下载 macOS 专版 `.app`：
 > [!NOTE]
 > - **v6 彻底移除浏览器限制**：macOS 不再需要安装 Chrome 或折腾 Safari 远程自动化，**双账号原生并发**，体验与 Windows 100% 一致！
 > - **数据位置**：`config.py`、`logs/` 与 `.app` 同级，可直接查看 / 编辑。
+
+---
+
+## 📱 手机独立版（iOS & Android · 脱离电脑）
+
+不想开电脑挂机？现已推出基于 Flutter 打造的 **手机独立版（iOS & Android）**——100% 脱离电脑、零服务器成本，端侧内置与桌面端同源的 **5 个原版无损 ONNX 验证码模型**，识别成功率与电脑桌面端一致！
+
+<div align="center">
+<table>
+<tr>
+<td align="center" width="33%">
+<img src="docs/IOS/01_home_rush.png" width="230" alt="手机版晨约主界面"><br>
+<b>晨约 · 抢座总控台</b><br>
+<sub>立即 / 06:30 定时 · 快捷方案 · 终端日志</sub>
+</td>
+<td align="center" width="33%">
+<img src="docs/IOS/03_seat_radar.png" width="230" alt="手机版全馆实时余座雷达"><br>
+<b>寻座 · 双校区实时雷达</b><br>
+<sub>崇山 / 蒲河 21 间自习室空座率 · 单室网格直订</sub>
+</td>
+<td align="center" width="33%">
+<img src="docs/IOS/05_my_ticket_pass.png" width="230" alt="手机版入馆座签与自习伴侣"><br>
+<b>入馆 · 座签与违约守护</b><br>
+<sub>双号违约监控 · 暂离防丢座 · 签到防违约提醒</sub>
+</td>
+</tr>
+</table>
+</div>
+
+- **🍎 iPhone / iPad 安装（0 元免越狱）**：前往 [GitHub Releases](https://github.com/xunrana/LNU-LibSeat-Automation/releases/latest) 下载 **`LNU-LibSeat-iOS-arm64-unsigned.ipa`**，使用 Sideloadly / 爱思助手 / SideStore 免费自签安装，详细图文步骤见 👉 **[🍎 iOS 零元免费安装教程](docs/IOS_INSTALL_GUIDE.md)**。
+- **🤖 Android 手机**：可自行运行 `python build_android.py` 一键编译独立 `.apk`（或关注 Releases 附件）。
+- **⏰ 睡前 06:30 过夜保活**：
+  - Android 支持前台常驻通知 + `AlarmManager` 穿透休眠闹钟；
+  - iOS 内置 **锁屏后台静音保活 + 纯 CPU 图像解码**（按电源键锁屏也能准点开抢，抢完自动关闭），并提供 **「银杏夜守」OLED 纯黑床头时钟** 双保险。
+- **📖 完整功能说明与全套 6 张实机截图**：请查阅 **[📱 手机独立版 README](mobile/README.md)**。
 
 ---
 
@@ -287,10 +324,27 @@ POST /cap/captcha/<token> → 拿 330×160 背景图 + 70×36 目标字图 + wor
 <table width="1000">
 <tr>
 <td align="center" width="250">
+<h3>📱</h3>
+<a href="mobile/README.md"><b>手机独立版 README</b></a><br>
+<sub>iOS / Android 全功能介绍与截图</sub>
+</td>
+<td align="center" width="250">
+<h3>🍎</h3>
+<a href="docs/IOS_INSTALL_GUIDE.md"><b>iOS 零元安装教程</b></a><br>
+<sub>Sideloadly / 爱思 / SideStore / 保活</sub>
+</td>
+<td align="center" width="250">
+<h3>🛠️</h3>
+<a href="docs/MOBILE_GUIDE.md"><b>手机端编译说明</b></a><br>
+<sub>APK / IPA 本地一键打包指南</sub>
+</td>
+<td align="center" width="250">
 <h3>🚀</h3>
 <a href="docs/MIGRATION_V5_TO_V6.md"><b>v5 → v6 升级指南</b></a><br>
 <sub>v5 老用户无缝迁移必读</sub>
 </td>
+</tr>
+<tr>
 <td align="center" width="250">
 <h3>📦</h3>
 <a href="docs/RELEASE_NOTES_V6.md"><b>v6.0.0 发布说明</b></a><br>
@@ -306,13 +360,13 @@ POST /cap/captcha/<token> → 拿 330×160 背景图 + 70×36 目标字图 + wor
 <a href="docs/CONFIGURATION.md"><b>配置详解</b></a><br>
 <sub>config.py 全字段说明</sub>
 </td>
-</tr>
-<tr>
 <td align="center" width="250">
 <h3>🏗️</h3>
 <a href="docs/ARCHITECTURE.md"><b>架构文档</b></a><br>
 <sub>v6 纯 API 四层解耦架构</sub>
 </td>
+</tr>
+<tr>
 <td align="center" width="250">
 <h3>🧠</h3>
 <a href="docs/CAPTCHA_YOLO4_SIAMESE.md"><b>验证码引擎</b></a><br>
@@ -325,30 +379,13 @@ POST /cap/captcha/<token> → 拿 330×160 背景图 + 70×36 目标字图 + wor
 </td>
 <td align="center" width="250">
 <h3>📘</h3>
-<a href="docs/QUICKSTART.md"><b>快速上手</b></a><br>
+<a href="docs/QUICKSTART.md"><b>桌面版快速上手</b></a><br>
 <sub>从零开始的完整使用教程</sub>
-</td>
-</tr>
-<tr>
-<td align="center" width="250">
-<h3>💬</h3>
-<a href="docs/FEEDBACK_MESSAGES.md"><b>反馈消息</b></a><br>
-<sub>系统反馈 → 程序行为映射</sub>
-</td>
-<td align="center" width="250">
-<h3>🔢</h3>
-<a href="docs/NUMERIC_PARAMETERS.md"><b>数字参数</b></a><br>
-<sub>超时 / 延迟 / 阈值清单</sub>
-</td>
-<td align="center" width="250">
-<h3>📜</h3>
-<a href="CHANGELOG.md"><b>更新日志</b></a><br>
-<sub>各版本完整变更记录</sub>
 </td>
 <td align="center" width="250">
 <h3>🗂️</h3>
 <a href="docs/README.md"><b>全部文档索引</b></a><br>
-<sub>含 v3/v5 历史档案</sub>
+<sub>含反馈消息 / 参数 / 历史档案</sub>
 </td>
 </tr>
 </table>
@@ -380,24 +417,33 @@ ruff check .
 </details>
 
 <details>
-<summary><b>PyInstaller 打包：Windows（.exe）/ macOS（.app）</b></summary>
+<summary><b>打包：Windows（.exe）/ macOS（.app）/ Android（.apk）/ iOS（.ipa）</b></summary>
 
 - **Windows**：`python build.py` → 产出 `dist/LNU-LibSeat-v6.0.0/` 与 `.zip`
 - **macOS**（需在 Mac 上 `git clone` 后运行）：`python3 build_mac.py` → 产出 `dist/LNU-LibSeat-v6.0.0-macOS-<arch>.zip`
+- **Android**：`python build_android.py` → 产出 `dist/辽宁大学图书馆座位预约.apk`
+- **iOS**（需在 Mac 上安装 Xcode + Flutter + CocoaPods）：`python3 build_ios.py` → 产出免签名 `dist/LNU-LibSeat-iOS-arm64-unsigned.ipa`（详见 [MOBILE_GUIDE.md](docs/MOBILE_GUIDE.md)）
 - 云端构建工作流 `.github/workflows/build-windows.yml` / `build-macos.yml` 仅保留手动触发（`workflow_dispatch`），推 tag 不会自动触发云端打包。
-- `build.py` / `build_mac.py` 已自动排除 `.pt/.pth` 训练权重，仅随包打包 4 个运行时 `*.onnx`。
+- `build.py` / `build_mac.py` 已自动排除 `.pt/.pth` 训练权重，仅随包打包运行时 `*.onnx`。
 </details>
 
 <details>
-<summary><b>项目结构（v6）</b></summary>
+<summary><b>项目结构</b></summary>
 
 ```
 LNU-LibSeat-Automation/
-├── gui_qt.py                        # 🖥️ PySide6 GUI 入口
+├── gui_qt.py                        # 🖥️ PySide6 桌面 GUI 入口
 ├── ui_qt/                           # 🎨 模块化桌面界面（panels / widgets / workers / services）
 ├── main.py                          # 🚀 CLI 入口（委托 logic.orchestrator）
 ├── config.example.py                # ⚙️ 配置模板（支持 FALLBACK_ROOMS / WEBHOOK_URL）
 ├── build.py / build_mac.py          # 📦 Windows & macOS 隔离 venv 打包脚本
+├── build_android.py / build_ios.py  # 📱 Android (.apk) & iOS 免签名 (.ipa) 一键构建脚本
+├── mobile/                          # 📱 Flutter 跨平台手机独立版源码（iOS & Android）
+│   ├── README.md                    #   手机独立版完整说明与实机截图
+│   ├── lib/                         #   纯 API 引擎 / 端侧 ONNX 识图 / 四频道 UI / 保活服务
+│   ├── android/                     #   Android 原生前台服务、精确闹钟与 CPU 解码
+│   └── ios/                         #   iOS UIScene、锁屏静音保活、纯 CPU ImageIO 解码
+├── scripts/                         # 🔧 移动端 ONNX 模型准备与跨语言测试向量导出
 ├── requirements.txt                 # requests / pycryptodome / ddddocr / onnxruntime / PySide6
 ├── info/                            # 📋 双校区 21 间自习室离线座号预览索引
 ├── core/                            # 🛠️ 协议与基础设施层（零 Selenium）
@@ -422,7 +468,7 @@ LNU-LibSeat-Automation/
 │   └── result_classifier.py         #   纯函数预约结果分类（含 seat_taken / not_open_yet）
 ├── model/ & train/                  # 🏋️ 验证码模型定义与完整自训练管线
 ├── tests/                           # ✅ 全套离线单元测试（pytest，零浏览器依赖）
-└── docs/                            # 📖 架构 / 协议契约 / 迁移指南 / 发布说明
+└── docs/                            # 📖 架构 / 协议契约 / iOS 安装教程 / 发布说明
 ```
 </details>
 

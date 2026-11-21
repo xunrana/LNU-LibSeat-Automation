@@ -8,8 +8,8 @@ LNU-LibSeat-Automation iOS 本地免付费打包脚本（Mac 专属 · 0 元免�
     1. 自动执行 `scripts/prepare_mobile_assets.py`（将 ONNX 权重转为 FP16，节省 ~73MB）
        与 `scripts/dump_test_vectors.py`
     2. 执行 `flutter build ios --release --no-codesign` 生成 `Runner.app`
-    3. 按照 Apple IPA 标准目录结构创建 `Payload/Runner.app`，并用 macOS 原生 `ditto`
-       打包为 `dist/LNU-LibSeat-v6.1.0-iOS-arm64-unsigned.ipa`
+    3. 按照 Apple IPA 标准目录结构创建 `Payload/Runner.app`，并用 macOS 原生 `ditto --norsrc`
+       打包为 `dist/LNU-LibSeat-iOS-arm64-unsigned.ipa`
 
 安装与分发方式（0 元免付费）：
     - 你自己安装：在 Mac 上用 Xcode 打开 `mobile/ios/Runner.xcworkspace`，登录你自己的
@@ -25,6 +25,8 @@ from __future__ import annotations
 import argparse
 import shutil
 import sys
+import urllib.request
+import zipfile
 from pathlib import Path
 
 from build_android import (
@@ -37,8 +39,146 @@ from build_android import (
     ensure_flutter_platform_scaffold,
 )
 
-IPA_OUT_NAME = f"LNU-LibSeat-{APP_VERSION}-iOS-arm64-unsigned.ipa"
+IPA_OUT_NAME = "LNU-LibSeat-iOS-arm64-unsigned.ipa"
 STAGE_IOS_DIR = ROOT / ".build_stage_ios"
+ORT_IOS_VERSION = "1.15.1"
+ORT_NUGET_URL = (
+    f"https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/"
+    f"{ORT_IOS_VERSION}/microsoft.ml.onnxruntime.{ORT_IOS_VERSION}.nupkg"
+)
+LOCAL_ORT_PODS_DIR = MOBILE_DIR / "ios" / ".generated" / "onnxruntime-pods"
+
+
+def ensure_ios_onnxruntime_local_pods() -> None:
+    """从微软官方 NuGet 提取 iOS onnxruntime.xcframework 1.15.1 生成本地 CocoaPods 源。
+
+    Flutter `onnxruntime: ^1.4.1` 依赖的 CocoaPods 归档 URL
+    (`onnxruntimepackages.z14.web.core.windows.net/pod-archive-onnxruntime-*-1.15.1.zip`)
+    已返回 404；微软官方 NuGet 包 `Microsoft.ML.OnnxRuntime 1.15.1` 内置同一套
+    官方 iOS `onnxruntime.xcframework`，本函数将其解包为本地 Pod 供 `Podfile` 引用，
+    并强制保留 Dart FFI 所需的 C API 符号避免 Release 链接裁剪。
+    """
+    ort_c_dir = LOCAL_ORT_PODS_DIR / "onnxruntime-c"
+    ort_objc_dir = LOCAL_ORT_PODS_DIR / "onnxruntime-objc"
+    xcfw_dir = ort_c_dir / "onnxruntime.xcframework"
+    arm64_bin = xcfw_dir / "ios-arm64" / "onnxruntime.framework" / "onnxruntime"
+    c_podspec = ort_c_dir / "onnxruntime-c.podspec"
+    objc_podspec = ort_objc_dir / "onnxruntime-objc.podspec"
+    anchor_src = ort_objc_dir / "Sources" / "OrtFfiAnchor.c"
+
+    if arm64_bin.is_file() and c_podspec.is_file() and objc_podspec.is_file() and anchor_src.is_file():
+        print(f"  [OK] 已命中本地官方 ONNX Runtime iOS xcframework ({ORT_IOS_VERSION})")
+        return
+
+    print(
+        f"=== [iOS ORT] 准备微软官方 NuGet Microsoft.ML.OnnxRuntime {ORT_IOS_VERSION} "
+        "iOS xcframework ==="
+    )
+    LOCAL_ORT_PODS_DIR.mkdir(parents=True, exist_ok=True)
+    nupkg_path = LOCAL_ORT_PODS_DIR / f"microsoft.ml.onnxruntime.{ORT_IOS_VERSION}.nupkg"
+
+    # 若工作区临时目录已有缓存包则复用，避免重复下载 104MB
+    cached_tmp = ROOT / ".tmp" / "ort_nuget" / f"ort-{ORT_IOS_VERSION}.nupkg"
+    if not nupkg_path.is_file() and cached_tmp.is_file():
+        shutil.copy2(cached_tmp, nupkg_path)
+
+    if not nupkg_path.is_file():
+        print(f"  -> 正在下载 {ORT_NUGET_URL}")
+        tmp_dl = nupkg_path.with_suffix(".nupkg.part")
+        urllib.request.urlretrieve(ORT_NUGET_URL, tmp_dl)
+        tmp_dl.replace(nupkg_path)
+
+    if xcfw_dir.exists():
+        shutil.rmtree(xcfw_dir)
+    ort_c_dir.mkdir(parents=True, exist_ok=True)
+    (ort_objc_dir / "Sources").mkdir(parents=True, exist_ok=True)
+
+    prefix = "runtimes/ios/native/onnxruntime.xcframework/"
+    license_bytes = b"MIT License\n"
+    with zipfile.ZipFile(nupkg_path, "r") as zf:
+        for info in zf.infolist():
+            if info.is_dir():
+                continue
+            if info.filename == "LICENSE.txt":
+                license_bytes = zf.read(info.filename)
+                continue
+            if info.filename.startswith(prefix):
+                rel = info.filename[len(prefix) :]
+                dst = xcfw_dir / rel
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                with zf.open(info, "r") as src_f, dst.open("wb") as dst_f:
+                    shutil.copyfileobj(src_f, dst_f)
+
+    if not arm64_bin.is_file():
+        raise FileNotFoundError(f"NuGet 包中未找到 iOS arm64 onnxruntime.framework: {arm64_bin}")
+
+    (ort_c_dir / "LICENSE").write_bytes(license_bytes)
+    (ort_objc_dir / "LICENSE").write_bytes(license_bytes)
+
+    c_podspec.write_text(
+        f"""Pod::Spec.new do |s|
+  s.name                  = 'onnxruntime-c'
+  s.version               = '{ORT_IOS_VERSION}'
+  s.summary               = 'ONNX Runtime C/C++ Pod (official NuGet Microsoft.ML.OnnxRuntime {ORT_IOS_VERSION})'
+  s.description           = 'ONNX Runtime C/C++ iOS xcframework extracted from official Microsoft.ML.OnnxRuntime {ORT_IOS_VERSION} NuGet package.'
+  s.homepage              = 'https://www.nuget.org/packages/Microsoft.ML.OnnxRuntime/{ORT_IOS_VERSION}'
+  s.license               = {{ :type => 'MIT', :file => 'LICENSE' }}
+  s.author                = {{ 'ONNX Runtime' => 'onnxruntime@microsoft.com' }}
+  s.source                = {{ :path => '.' }}
+  s.platform              = :ios, '15.0'
+  s.vendored_frameworks   = 'onnxruntime.xcframework'
+  s.static_framework      = true
+  s.weak_frameworks       = 'CoreML'
+  s.libraries             = 'c++'
+  s.preserve_paths        = ['LICENSE']
+  s.user_target_xcconfig  = {{
+    'OTHER_LDFLAGS' => '$(inherited) -Wl,-u,_OrtGetApiBase -Wl,-u,_OrtSessionOptionsAppendExecutionProvider_CPU -Wl,-u,_OrtSessionOptionsAppendExecutionProvider_CoreML'
+  }}
+end
+""",
+        encoding="utf-8",
+    )
+
+    anchor_src.write_text(
+        """#include <stdint.h>
+
+extern const void *OrtGetApiBase(void);
+extern void *OrtSessionOptionsAppendExecutionProvider_CPU(void *options, int use_arena);
+extern void *OrtSessionOptionsAppendExecutionProvider_CoreML(void *options, uint32_t coreml_flags);
+
+__attribute__((used, visibility("default")))
+const void *lnu_ort_ffi_keep_symbols(int idx) {
+  switch (idx) {
+    case 0: return (const void *)&OrtGetApiBase;
+    case 1: return (const void *)&OrtSessionOptionsAppendExecutionProvider_CPU;
+    case 2: return (const void *)&OrtSessionOptionsAppendExecutionProvider_CoreML;
+    default: return (const void *)0;
+  }
+}
+""",
+        encoding="utf-8",
+    )
+
+    objc_podspec.write_text(
+        f"""Pod::Spec.new do |s|
+  s.name                  = 'onnxruntime-objc'
+  s.version               = '{ORT_IOS_VERSION}'
+  s.summary               = 'ONNX Runtime Objective-C Pod shim for Flutter FFI'
+  s.description           = 'Lightweight shim satisfying Flutter onnxruntime FFI pod dependency and anchoring exported C API symbols.'
+  s.homepage              = 'https://www.nuget.org/packages/Microsoft.ML.OnnxRuntime/{ORT_IOS_VERSION}'
+  s.license               = {{ :type => 'MIT', :file => 'LICENSE' }}
+  s.author                = {{ 'ONNX Runtime' => 'onnxruntime@microsoft.com' }}
+  s.source                = {{ :path => '.' }}
+  s.platform              = :ios, '15.0'
+  s.static_framework      = true
+  s.preserve_paths        = ['LICENSE']
+  s.source_files          = 'Sources/**/*.c'
+  s.dependency 'onnxruntime-c', '{ORT_IOS_VERSION}'
+end
+""",
+        encoding="utf-8",
+    )
+    print(f"  [OK] 本地官方 ONNX Runtime iOS Pod 就绪: {LOCAL_ORT_PODS_DIR}")
 
 
 def package_unsigned_ipa(runner_app_dir: Path, out_ipa_path: Path) -> None:
@@ -50,7 +190,7 @@ def package_unsigned_ipa(runner_app_dir: Path, out_ipa_path: Path) -> None:
 
     target_app = payload_dir / "Runner.app"
     if sys.platform == "darwin":
-        _run(["ditto", str(runner_app_dir), str(target_app)])
+        _run(["ditto", "--norsrc", str(runner_app_dir), str(target_app)])
     else:
         shutil.copytree(runner_app_dir, target_app)
 
@@ -64,7 +204,7 @@ def package_unsigned_ipa(runner_app_dir: Path, out_ipa_path: Path) -> None:
                 "ditto",
                 "-c",
                 "-k",
-                "--sequesterRsrc",
+                "--norsrc",
                 "--keepParent",
                 str(payload_dir),
                 str(out_ipa_path),
@@ -133,6 +273,8 @@ def main() -> None:
     _run([flutter_bin, "pub", "get"], cwd=MOBILE_DIR)
     if not args.skip_tests:
         _run([flutter_bin, "test"], cwd=MOBILE_DIR)
+
+    ensure_ios_onnxruntime_local_pods()
 
     print("\n=== [Step 5] 免签名编译 Release iOS Runner.app (--no-codesign) ===")
     _run(

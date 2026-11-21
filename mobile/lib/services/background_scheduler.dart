@@ -294,4 +294,29 @@ class BackgroundSchedulerService {
       await _channel.invokeMethod<void>('requestFullScreenIntentPermission');
     } catch (_) {}
   }
+
+  /// iOS 专属：启动静音音频会话后台保活，防止按电源键锁屏或切后台时被系统冻结进程。
+  Future<bool> startIosBackgroundKeepAlive() async {
+    if (!Platform.isIOS) {
+      return false;
+    }
+    try {
+      final ok = await _channel.invokeMethod<bool>(
+        'startIosBackgroundKeepAlive',
+      );
+      return ok ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// iOS 专属：停止静音音频保活并释放音频会话。
+  Future<void> stopIosBackgroundKeepAlive() async {
+    if (!Platform.isIOS) {
+      return;
+    }
+    try {
+      await _channel.invokeMethod<void>('stopIosBackgroundKeepAlive');
+    } catch (_) {}
+  }
 }

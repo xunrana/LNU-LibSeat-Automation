@@ -110,18 +110,19 @@ class RgbImage {
   }
 }
 
-/// 优先使用平台原生 `libjpeg-turbo` / `libpng` 解码图片，保证与 Python Pillow 逐像素一致：
-/// 1. Android：优先走原生 CPU `BitmapFactory`（不依赖 Impeller GPU 纹理回读，熄屏/后台 06:30 守夜同样稳定）
-/// 2. iOS / 桌面 / 兜底：走 Flutter `dart:ui`（`rawStraightRgba` 优先，失败自动回退 `rawRgba` 反预乘）
+/// 优先使用平台原生 CPU 图像解码器，保证与 Python Pillow 逐像素一致且零 GPU 依赖：
+/// 1. Android / iOS：优先走原生 CPU 解码（Android `BitmapFactory` / iOS `ImageIO + CoreGraphics`，
+///    不依赖 Impeller/Metal GPU 纹理回读，锁屏/后台 06:30 定时守夜期间同样 100% 稳定）
+/// 2. 桌面 / 兜底：走 Flutter `dart:ui`（`rawStraightRgba` 优先，失败自动回退 `rawRgba` 反预乘）
 /// 3. 无 Flutter 引擎环境（纯 Dart 离线单测）：回退 `package:image`
 Future<RgbImage?> decodeImageRgb(Uint8List bytes) async {
   if (bytes.isEmpty) {
     return null;
   }
 
-  // 1. Android 原生 CPU BitmapFactory（零 GPU 依赖，熄屏后台安全，与 Pillow libjpeg-turbo 0/255 偏差）
-  if (Platform.isAndroid) {
-    final nativeDecoded = await _decodeViaAndroidNative(bytes);
+  // 1. 移动端原生 CPU 解码（Android BitmapFactory / iOS ImageIO，零 GPU 依赖，锁屏后台安全）
+  if (Platform.isAndroid || Platform.isIOS) {
+    final nativeDecoded = await _decodeViaNativeCpu(bytes);
     if (nativeDecoded != null) {
       return nativeDecoded;
     }
@@ -175,7 +176,7 @@ Future<RgbImage?> decodeImageRgb(Uint8List bytes) async {
   return decodeImageRgbSync(bytes);
 }
 
-Future<RgbImage?> _decodeViaAndroidNative(Uint8List bytes) async {
+Future<RgbImage?> _decodeViaNativeCpu(Uint8List bytes) async {
   try {
     final res = await _nativeImageChannel
         .invokeMapMethod<String, dynamic>(
@@ -195,7 +196,11 @@ Future<RgbImage?> _decodeViaAndroidNative(Uint8List bytes) async {
     if (rawRgba.length < width * height * 4) {
       return null;
     }
-    return _fromStraightRgba(rawRgba, width, height, decoder: 'android_cpu');
+    final premultiplied = res['premultiplied'] == true;
+    final decoderName = Platform.isIOS ? 'ios_cpu' : 'android_cpu';
+    return premultiplied
+        ? _fromPremultipliedRgba(rawRgba, width, height, decoder: '${decoderName}_premul')
+        : _fromStraightRgba(rawRgba, width, height, decoder: decoderName);
   } catch (_) {
     return null;
   }

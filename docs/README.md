@@ -3,10 +3,15 @@
 > 本目录是直接浏览 `docs/` 时的速查清单。完整图文导航见仓库根 [README](../README.md)。
 
 ## 上手 & 升级
-- [QUICKSTART.md](QUICKSTART.md) — 快速上手
+- [QUICKSTART.md](QUICKSTART.md) — 桌面版快速上手
 - [CONFIGURATION.md](CONFIGURATION.md) — v6 配置项详解
 - [MIGRATION_V5_TO_V6.md](MIGRATION_V5_TO_V6.md) — **v5 → v6 升级指南（最新）**
 - [MIGRATION_V3_TO_V5.md](MIGRATION_V3_TO_V5.md) — v3 → v5 历史升级指南
+
+## 手机独立版（Android & iOS）
+- [mobile/README.md](../mobile/README.md) — **📱 手机独立版完整说明与实机截图**
+- [IOS_INSTALL_GUIDE.md](IOS_INSTALL_GUIDE.md) — **🍎 iPhone / iOS 零元免费安装与过夜保活教程**
+- [MOBILE_GUIDE.md](MOBILE_GUIDE.md) — 🛠️ 手机端本地编译（APK / IPA）与技术说明
 
 ## 架构 & 协议
 - [ARCHITECTURE.md](ARCHITECTURE.md) — **v6 纯 API 四层架构**
@@ -27,4 +32,4 @@
 - [RELEASE_NOTES.md](RELEASE_NOTES.md) — v3.0.0 历史发布说明
 - 各版本简要变更见根目录 [CHANGELOG.md](../CHANGELOG.md)
 
-> 图片资源：`flowcharts/`（流程图 PNG）、`screenshots/`（界面截图）。
+> 图片资源：`flowcharts/`（流程图 PNG）、`screenshots/`（桌面端界面截图）、`IOS/`（移动端真机截图 PNG）。

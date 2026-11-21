@@ -1109,6 +1109,20 @@ class _KeepAliveGuidePageState extends State<_KeepAliveGuidePage>
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: <Widget>[
+          if (Platform.isIOS)
+            const Card(
+              child: ListTile(
+                leading: Icon(
+                  Icons.bedtime_rounded,
+                  color: LnuColors.amberHot,
+                ),
+                title: Text('iOS 锁屏后台静音保活（已内置自动开启）'),
+                subtitle: Text(
+                  '启动定时抢座后自动防系统冻结，按电源键锁屏或切后台均可准点 06:30 开抢；'
+                  '请勿上滑强杀 App，过夜建议插电更稳妥。',
+                ),
+              ),
+            ),
           if (Platform.isAndroid) ...<Widget>[
             Card(
               child: Padding(

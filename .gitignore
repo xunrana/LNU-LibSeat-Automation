@@ -86,6 +86,7 @@ mobile/.flutter-plugins-dependencies
 mobile/.packages
 mobile/build/
 mobile/ios/Pods/
+mobile/ios/Podfile.lock
 mobile/ios/.symlinks/
 mobile/ios/Flutter/ephemeral/
 mobile/android/.gradle/

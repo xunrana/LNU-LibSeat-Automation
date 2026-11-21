@@ -243,6 +243,11 @@ class MobileRushController extends ChangeNotifier {
     notifyListeners();
 
     await BackgroundSchedulerService.instance.setKeepScreenAwake(true);
+    final iosKeepAliveOk = await BackgroundSchedulerService.instance
+        .startIosBackgroundKeepAlive();
+    if (iosKeepAliveOk) {
+      appendLog('system', '🌙 已激活 iOS 锁屏后台保活（锁屏/切后台不冻结，抢座结束后自动关闭）');
+    }
     if (sessionCfg.waitForSchedule) {
       final sched = buildCustomSchedule(
         sessionCfg.scheduleHour,
@@ -340,6 +345,7 @@ class MobileRushController extends ChangeNotifier {
       }
       await BackgroundSchedulerService.instance
           .stopAndroidForegroundRushService();
+      await BackgroundSchedulerService.instance.stopIosBackgroundKeepAlive();
       await BackgroundSchedulerService.instance.setKeepScreenAwake(false);
       notifyListeners();
     }
@@ -350,6 +356,7 @@ class MobileRushController extends ChangeNotifier {
     appendLog('system', '已发送中止指令');
     await BackgroundSchedulerService.instance
         .stopAndroidForegroundRushService();
+    await BackgroundSchedulerService.instance.stopIosBackgroundKeepAlive();
     await BackgroundSchedulerService.instance.setKeepScreenAwake(false);
     isRunning = false;
     rushStage = RushStepStage.idle;

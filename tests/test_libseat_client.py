@@ -13,7 +13,13 @@ from PIL import Image
 
 from core.clock_sync import ClockSync
 from core.libseat_client import ClickCaptchaChallenge, HttpLibSeatClient
-from core.protocol import GlobalConfig, ProtocolDriftError, TokenExpiredError
+from core.protocol import (
+    GlobalConfig,
+    ProtocolDriftError,
+    TokenExpiredError,
+    TransientServerBusyError,
+    is_transient_busy_text,
+)
 from core.rate_limiter import RateLimitCircuitOpenError, RateLimiter, RateLimiterConfig
 from core.session_recorder import SessionRecorder
 
@@ -249,3 +255,32 @@ def test_protocol_drift_token_expired_and_rate_limit_errors():
     c_429, _ = _make_client([_FakeResponse(429, {"message": "too many requests"})])
     with pytest.raises(RateLimitCircuitOpenError):
         c_429.list_active_reservations()
+
+
+def test_transient_server_busy_on_captcha_and_5xx_does_not_trip_protocol_drift():
+    assert is_transient_busy_text("系统繁忙, 请稍后: 05") is True
+    assert is_transient_busy_text("系统繁忙, 请稍后: 06") is True
+    assert is_transient_busy_text("操作过于频繁") is True
+    # 维护提示含“请稍后”但必须优先归类为维护而非瞬态繁忙
+    assert is_transient_busy_text("系统维护中，请稍后再试") is False
+
+    # 1) 06:30 高峰 /cap/captcha 返回「系统繁忙, 请稍后: 05」应抛 TransientServerBusyError 而非 ProtocolDriftError
+    c_cap, _ = _make_client([
+        _FakeResponse(200, {"status": "FAIL", "message": "系统繁忙, 请稍后: 05"}),
+    ])
+    c_cap._token = "L" * 48
+    c_cap._account = "20240001"
+    with pytest.raises(TransientServerBusyError) as exc_info:
+        c_cap.fetch_click_captcha()
+    assert exc_info.value.is_rate_limit is True
+    assert "05" in str(exc_info.value)
+
+    # 2) 高峰网关 502/503 HTML 不应误判为协议漂移
+    c_502, _ = _make_client([_FakeResponse(502, "<html>502 Bad Gateway</html>")])
+    with pytest.raises(TransientServerBusyError):
+        c_502.list_room_seats("24", "2026-11-22")
+
+    # 3) room_layout 返回「系统繁忙」应抛 TransientServerBusyError
+    c_layout, _ = _make_client([_FakeResponse(200, {"status": "fail", "message": "系统繁忙，请稍后再试"})])
+    with pytest.raises(TransientServerBusyError):
+        c_layout.list_room_seats("24", "2026-11-22")

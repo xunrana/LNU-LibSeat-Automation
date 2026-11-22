@@ -10,6 +10,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../logic/seat_strategy.dart';
 import '../../services/background_scheduler.dart';
 import '../../services/config_store.dart';
+import '../../services/log_exporter.dart';
 import '../../services/notification_service.dart';
 import '../../services/rush_controller.dart';
 import '../theme/app_theme.dart';
@@ -1295,9 +1296,24 @@ class _KeepAliveGuidePageState extends State<_KeepAliveGuidePage>
 }
 
 // ── 二级页 7：运行记录与识图回放（调试图优雅收纳在此，绝不污染首页！） ──
-class _DiagnosticsPage extends StatelessWidget {
+class _DiagnosticsPage extends StatefulWidget {
   final MobileRushController controller;
   const _DiagnosticsPage({required this.controller});
+
+  @override
+  State<_DiagnosticsPage> createState() => _DiagnosticsPageState();
+}
+
+class _DiagnosticsPageState extends State<_DiagnosticsPage> {
+  bool _exporting = false;
+
+  Rect? _shareOrigin(BuildContext context) {
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) {
+      return null;
+    }
+    return box.localToGlobal(Offset.zero) & box.size;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1306,9 +1322,12 @@ class _DiagnosticsPage extends StatelessWidget {
         title: Text('运行记录与识图回放', style: LnuTheme.serif(17, weight: FontWeight.w700)),
       ),
       body: ListenableBuilder(
-        listenable: controller,
+        listenable: widget.controller,
         builder: (context, _) {
-          final diag = controller.latestDiagnostic;
+          final diag = widget.controller.latestDiagnostic;
+          final inv = MobileLogExporter.scanInventory(
+            widget.controller.config.logBaseDir,
+          );
           return ListView(
             padding: const EdgeInsets.all(16),
             children: <Widget>[
@@ -1348,14 +1367,52 @@ class _DiagnosticsPage extends StatelessWidget {
                 ),
               ),
               Card(
-                child: ListTile(
-                  leading: const Icon(Icons.ios_share_rounded, color: LnuColors.ok),
-                  title: const Text('导出最近一次脱敏会话流水'),
-                  subtitle: const Text('密码、Token 与 Cookie 已自动脱敏抹除'),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => _exportLatestTrace(context),
+                child: Column(
+                  children: <Widget>[
+                    ListTile(
+                      leading: const Icon(Icons.ios_share_rounded, color: LnuColors.ok),
+                      title: const Text('导出最近一轮抢座日志（含双账号）'),
+                      subtitle: const Text('含运行终端日志 + 主/副账号脱敏 HTTP 流水 + 抢座顺序'),
+                      trailing: _exporting
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.chevron_right_rounded),
+                      onTap: _exporting ? null : () => _exportLatestBatch(context),
+                    ),
+                    const Divider(height: 1, indent: 52),
+                    ListTile(
+                      leading: const Icon(Icons.folder_zip_outlined, color: LnuColors.ink),
+                      title: const Text('打包导出全部历史抢座日志 (.zip)'),
+                      subtitle: Text(
+                        inv.sessionCount == 0
+                            ? '当前尚无历史会话记录（密码/Token 已自动脱敏）'
+                            : '共 ${inv.sessionCount} 场会话 · ${inv.fileCount} 个文件 (${inv.formattedSize})，含识图回放图',
+                      ),
+                      trailing: _exporting
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.chevron_right_rounded),
+                      onTap: _exporting ? null : () => _exportAllZip(context),
+                    ),
+                  ],
                 ),
               ),
+              if (Platform.isIOS)
+                const Card(
+                  child: ListTile(
+                    leading: Icon(Icons.folder_open_rounded, color: LnuColors.amberHot),
+                    title: Text('iOS「文件」App 直接访问'),
+                    subtitle: Text(
+                      '也可打开系统自带「文件」App →「我的 iPhone」→「LNU-LibSeat」→「lnu_libseat_logs」随时浏览或隔空投送全部脱敏日志。',
+                    ),
+                  ),
+                ),
             ],
           );
         },
@@ -1363,28 +1420,57 @@ class _DiagnosticsPage extends StatelessWidget {
     );
   }
 
-  Future<void> _exportLatestTrace(BuildContext context) async {
-    final baseDir = controller.config.logBaseDir;
-    if (baseDir == null) {
-      return;
-    }
-    final sessionsDir = Directory('${baseDir.path}/sessions');
-    if (!sessionsDir.existsSync()) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('当前尚无运行会话日志')),
-      );
-      return;
-    }
-    final dirs = sessionsDir.listSync().whereType<Directory>().toList()
-      ..sort((a, b) => b.path.compareTo(a.path));
-    for (final d in dirs) {
-      final f = File('${d.path}/http_trace.jsonl');
-      if (f.existsSync()) {
-        await Share.shareXFiles(
-          <XFile>[XFile(f.path)],
-          text: 'LNU LibSeat 脱敏会话诊断日志',
+  Future<void> _exportLatestBatch(BuildContext context) async {
+    final files = MobileLogExporter.collectLatestRushFiles(
+      widget.controller.config.logBaseDir,
+    );
+    if (files.isEmpty) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('当前尚无运行会话日志')),
         );
+      }
+      return;
+    }
+    setState(() => _exporting = true);
+    try {
+      await Share.shareXFiles(
+        files.map((f) => XFile(f.path)).toList(growable: false),
+        text: 'LNU LibSeat 最近一轮抢座脱敏诊断日志（共 ${files.length} 个文件）',
+        sharePositionOrigin: _shareOrigin(context),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _exporting = false);
+      }
+    }
+  }
+
+  Future<void> _exportAllZip(BuildContext context) async {
+    setState(() => _exporting = true);
+    try {
+      final zipFile = MobileLogExporter.exportAllLogsToZip(
+        widget.controller.config.logBaseDir,
+      );
+      if (zipFile == null || !zipFile.existsSync()) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('当前尚无历史抢座日志可打包')),
+          );
+        }
         return;
+      }
+      if (!context.mounted) {
+        return;
+      }
+      await Share.shareXFiles(
+        <XFile>[XFile(zipFile.path)],
+        text: 'LNU LibSeat 全部历史抢座脱敏日志包',
+        sharePositionOrigin: _shareOrigin(context),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _exporting = false);
       }
     }
   }

@@ -14,9 +14,15 @@ import 'result_classifier.dart';
 import 'seat_strategy.dart';
 
 const int maxCaptchaRetriesPerSeat = 8;
+const int maxBusyRetriesPerSeat = 12;
 const double openGraceWindowSeconds = 5.0;
 const int maxOpenGraceRetries = 5;
 const Duration openGraceBackoffDuration = Duration(milliseconds: 250);
+const Duration peakClick3MinSolveDuration = Duration(milliseconds: 850);
+const Duration peakClick3PostCheckDuration = Duration(milliseconds: 250);
+const Duration peakPostCheckStepDuration = Duration(milliseconds: 400);
+const Duration peakPostCheckMaxDuration = Duration(milliseconds: 1500);
+const Duration peakClick3RetryCooldownDuration = Duration(milliseconds: 600);
 
 typedef LogCallback = void Function(String account, String message);
 typedef CaptchaDiagnosticCallback = void Function(
@@ -69,7 +75,11 @@ class ApiSeatBooker {
   final CaptchaService captchaService;
   final SessionRecorder? recorder;
   final int maxCaptchaRetries;
+  final int maxBusyRetries;
   final Duration graceBackoff;
+  final Duration peakMinSolveDuration;
+  final Duration peakPostCheckDuration;
+  final Duration peakRetryCooldownDuration;
   final LogCallback? onLog;
   final CaptchaDiagnosticCallback? onCaptchaDiagnostic;
 
@@ -79,7 +89,11 @@ class ApiSeatBooker {
     required this.captchaService,
     this.recorder,
     this.maxCaptchaRetries = maxCaptchaRetriesPerSeat,
+    this.maxBusyRetries = maxBusyRetriesPerSeat,
     this.graceBackoff = openGraceBackoffDuration,
+    this.peakMinSolveDuration = peakClick3MinSolveDuration,
+    this.peakPostCheckDuration = peakClick3PostCheckDuration,
+    this.peakRetryCooldownDuration = peakClick3RetryCooldownDuration,
     this.onLog,
     this.onCaptchaDiagnostic,
   });
@@ -123,6 +137,30 @@ class ApiSeatBooker {
     return deltaS >= -1.0 && deltaS <= openGraceWindowSeconds;
   }
 
+  /// 处理服务端瞬态繁忙退避；返回 `(shouldContinue, stopReason)`。
+  Future<(bool, String)> _waitTransientBusy(
+    String stageDesc,
+    String message,
+    int busyRetries,
+    CancelTokenSource stopToken, {
+    bool isRateLimit = true,
+  }) async {
+    _log('⏳ $stageDesc遇服务端繁忙 ($busyRetries/$maxBusyRetries): $message，退避重试...');
+    try {
+      final ok = await client.rateLimiter.waitBackoff(
+        stopToken: stopToken,
+        isRateLimit: isRateLimit,
+      );
+      if (!ok) {
+        return (false, '收到停止信号');
+      }
+      return (true, '');
+    } on RateLimitCircuitOpenException catch (exc) {
+      _log('🛑 ${exc.message}');
+      return (false, exc.message);
+    }
+  }
+
   /// 对单个座位执行完整「取码 → 本地 ONNX 求解 → 校验 → freeBook」闭环。
   Future<BookResponse> attemptSeat(
     SeatCandidate seat, {
@@ -134,8 +172,11 @@ class ApiSeatBooker {
     DateTime? fireAt,
   }) async {
     var graceRetries = 0;
+    var busyRetries = 0;
+    var captchaAttempt = 0;
+    var adaptivePostCheck = peakPostCheckDuration;
 
-    for (var retry = 1; retry <= maxCaptchaRetries; retry++) {
+    while (captchaAttempt < maxCaptchaRetries) {
       if (stopToken.isCancelled) {
         return BookResponse(
           status: ApiOutcomeStatus.stop,
@@ -144,7 +185,8 @@ class ApiSeatBooker {
         );
       }
 
-      _log('🔁 座位 ${seat.seatNo} 第 $retry/$maxCaptchaRetries 次纯 API 验证码与提交尝试...');
+      final displayAttempt = captchaAttempt + 1;
+      _log('🔁 座位 ${seat.seatNo} 第 $displayAttempt/$maxCaptchaRetries 次纯 API 验证码与提交尝试...');
 
       ClickCaptchaChallenge challenge;
       try {
@@ -171,6 +213,31 @@ class ApiSeatBooker {
         );
       } on TokenExpiredException {
         rethrow;
+      } on TransientServerBusyException catch (exc) {
+        busyRetries += 1;
+        if (busyRetries > maxBusyRetries) {
+          _log('💔 座位 ${seat.seatNo} 拉取验证码连续繁忙达 $maxBusyRetries 次，切换下一座位');
+          return BookResponse(
+            status: ApiOutcomeStatus.failed,
+            message: exc.message,
+            seatNo: seat.seatNo,
+          );
+        }
+        final (cont, stopMsg) = await _waitTransientBusy(
+          '拉取验证码',
+          exc.message,
+          busyRetries,
+          stopToken,
+          isRateLimit: exc.isRateLimit,
+        );
+        if (!cont) {
+          return BookResponse(
+            status: ApiOutcomeStatus.stop,
+            message: stopMsg,
+            seatNo: seat.seatNo,
+          );
+        }
+        continue;
       } on DioException catch (exc) {
         _log('⚠️ 拉取验证码网络异常: ${exc.message}');
         if (!await client.rateLimiter.waitBackoff(stopToken: stopToken)) {
@@ -182,6 +249,10 @@ class ApiSeatBooker {
         }
         continue;
       }
+
+      final fetchSw = Stopwatch()..start();
+      final isPeakClick3 = challenge.wordCheckCount >= 3;
+      captchaAttempt += 1;
 
       final outcome = await captchaService.solve(
         challenge.targetBytes,
@@ -200,7 +271,7 @@ class ApiSeatBooker {
           outcome: outcome.toDiagnosticMeta(),
           priority: priority,
           seat: seat.seatNo,
-          retry: retry,
+          retry: captchaAttempt,
         );
         if (recorder!.latestDiagnosticMeta != null) {
           onCaptchaDiagnostic?.call(account, recorder!.latestDiagnosticMeta!);
@@ -234,6 +305,18 @@ class ApiSeatBooker {
         '(${outcome.elapsedMs.round()}ms$simHint): ${outcome.points}',
       );
 
+      // 06:30 高峰三字码防极速风控：补齐最小求解间隔，避免 500ms 内直交被后端拒判
+      if (isPeakClick3 && peakMinSolveDuration > Duration.zero) {
+        final pad = peakMinSolveDuration - fetchSw.elapsed;
+        if (pad > Duration.zero && !await stopToken.sleepExact(pad)) {
+          return BookResponse(
+            status: ApiOutcomeStatus.stop,
+            message: '收到停止信号',
+            seatNo: seat.seatNo,
+          );
+        }
+      }
+
       ClickCaptchaCheckResult checkRes;
       try {
         checkRes = await client.checkClickCaptcha(
@@ -263,6 +346,34 @@ class ApiSeatBooker {
         );
       } on TokenExpiredException {
         rethrow;
+      } on TransientServerBusyException catch (exc) {
+        saveDiag();
+        if (captchaAttempt > 0) {
+          captchaAttempt -= 1;
+        }
+        busyRetries += 1;
+        if (busyRetries > maxBusyRetries) {
+          return BookResponse(
+            status: ApiOutcomeStatus.failed,
+            message: exc.message,
+            seatNo: seat.seatNo,
+          );
+        }
+        final (cont, stopMsg) = await _waitTransientBusy(
+          '校验验证码',
+          exc.message,
+          busyRetries,
+          stopToken,
+          isRateLimit: exc.isRateLimit,
+        );
+        if (!cont) {
+          return BookResponse(
+            status: ApiOutcomeStatus.stop,
+            message: stopMsg,
+            seatNo: seat.seatNo,
+          );
+        }
+        continue;
       } on DioException catch (exc) {
         saveDiag();
         _log('⚠️ 校验验证码网络异常: ${exc.message}');
@@ -278,6 +389,34 @@ class ApiSeatBooker {
 
       if (!checkRes.ok) {
         saveDiag();
+        if (isTransientBusyText(checkRes.message)) {
+          if (captchaAttempt > 0) {
+            captchaAttempt -= 1;
+          }
+          busyRetries += 1;
+          if (busyRetries > maxBusyRetries) {
+            return BookResponse(
+              status: ApiOutcomeStatus.failed,
+              message: checkRes.message,
+              seatNo: seat.seatNo,
+            );
+          }
+          final (cont, stopMsg) = await _waitTransientBusy(
+            '校验验证码',
+            checkRes.message,
+            busyRetries,
+            stopToken,
+            isRateLimit: true,
+          );
+          if (!cont) {
+            return BookResponse(
+              status: ApiOutcomeStatus.stop,
+              message: stopMsg,
+              seatNo: seat.seatNo,
+            );
+          }
+          continue;
+        }
         _log('⚠️ 验证码校验未通过 (${checkRes.message})，刷新重试');
         if (!await client.rateLimiter.waitBackoff(stopToken: stopToken)) {
           return BookResponse(
@@ -286,7 +425,26 @@ class ApiSeatBooker {
             seatNo: seat.seatNo,
           );
         }
+        if (isPeakClick3 && peakRetryCooldownDuration > Duration.zero) {
+          if (!await stopToken.sleepExact(peakRetryCooldownDuration)) {
+            return BookResponse(
+              status: ApiOutcomeStatus.stop,
+              message: '收到停止信号',
+              seatNo: seat.seatNo,
+            );
+          }
+        }
         continue;
+      }
+
+      if (isPeakClick3 && adaptivePostCheck > Duration.zero) {
+        if (!await stopToken.sleepExact(adaptivePostCheck)) {
+          return BookResponse(
+            status: ApiOutcomeStatus.stop,
+            message: '收到停止信号',
+            seatNo: seat.seatNo,
+          );
+        }
       }
 
       _log('✅ 验证码一次通过，立即提交 freeBook (座位 ${seat.seatNo})...');
@@ -326,6 +484,34 @@ class ApiSeatBooker {
         );
       } on TokenExpiredException {
         rethrow;
+      } on TransientServerBusyException catch (exc) {
+        saveDiag();
+        if (captchaAttempt > 0) {
+          captchaAttempt -= 1;
+        }
+        busyRetries += 1;
+        if (busyRetries > maxBusyRetries) {
+          return BookResponse(
+            status: ApiOutcomeStatus.failed,
+            message: exc.message,
+            seatNo: seat.seatNo,
+          );
+        }
+        final (cont, stopMsg) = await _waitTransientBusy(
+          '提交预约',
+          exc.message,
+          busyRetries,
+          stopToken,
+          isRateLimit: exc.isRateLimit,
+        );
+        if (!cont) {
+          return BookResponse(
+            status: ApiOutcomeStatus.stop,
+            message: stopMsg,
+            seatNo: seat.seatNo,
+          );
+        }
+        continue;
       } on DioException catch (exc) {
         saveDiag();
         _log('⚠️ freeBook 网络异常: ${exc.message}');
@@ -363,7 +549,7 @@ class ApiSeatBooker {
           '⏳ 服务端尚在切换放座瞬态 ($graceRetries/$maxOpenGraceRetries): '
           '${bookRes.message}，${graceBackoff.inMilliseconds}ms 后重探...',
         );
-        if (!await stopToken.sleepInterruptible(graceBackoff)) {
+        if (!await stopToken.sleepExact(graceBackoff)) {
           return BookResponse(
             status: ApiOutcomeStatus.stop,
             message: '收到停止信号',
@@ -374,11 +560,57 @@ class ApiSeatBooker {
       }
 
       if (bookRes.status == ApiOutcomeStatus.retryCaptcha) {
-        _log('⚠️ 收到可重试业务反馈【${bookRes.message}】，退避重试当前座位');
+        if (bookRes.rateLimited) {
+          if (captchaAttempt > 0) {
+            captchaAttempt -= 1;
+          }
+          busyRetries += 1;
+          if (busyRetries > maxBusyRetries) {
+            return BookResponse(
+              status: ApiOutcomeStatus.failed,
+              message: bookRes.message,
+              seatNo: seat.seatNo,
+            );
+          }
+          final (cont, stopMsg) = await _waitTransientBusy(
+            '提交预约',
+            bookRes.message,
+            busyRetries,
+            stopToken,
+            isRateLimit: true,
+          );
+          if (!cont) {
+            return BookResponse(
+              status: ApiOutcomeStatus.stop,
+              message: stopMsg,
+              seatNo: seat.seatNo,
+            );
+          }
+          continue;
+        }
+
+        if (isPeakClick3 &&
+            bookRes.message.contains('验证码') &&
+            adaptivePostCheck < peakPostCheckMaxDuration) {
+          final nextMs =
+              (adaptivePostCheck + peakPostCheckStepDuration).inMilliseconds;
+          adaptivePostCheck = Duration(
+            milliseconds: nextMs > peakPostCheckMaxDuration.inMilliseconds
+                ? peakPostCheckMaxDuration.inMilliseconds
+                : nextMs,
+          );
+          _log(
+            '⚠️ 校验已通过但 freeBook 报【${bookRes.message}】，自动提升高峰校验后缓冲至 '
+            '${(adaptivePostCheck.inMilliseconds / 1000.0).toStringAsFixed(2)}s 后重试',
+          );
+        } else {
+          _log('⚠️ 收到可重试业务反馈【${bookRes.message}】，退避重试当前座位');
+        }
+
         try {
           if (!await client.rateLimiter.waitBackoff(
             stopToken: stopToken,
-            isRateLimit: bookRes.rateLimited,
+            isRateLimit: false,
           )) {
             return BookResponse(
               status: ApiOutcomeStatus.stop,
@@ -393,6 +625,15 @@ class ApiSeatBooker {
             message: exc.message,
             seatNo: seat.seatNo,
           );
+        }
+        if (isPeakClick3 && peakRetryCooldownDuration > Duration.zero) {
+          if (!await stopToken.sleepExact(peakRetryCooldownDuration)) {
+            return BookResponse(
+              status: ApiOutcomeStatus.stop,
+              message: '收到停止信号',
+              seatNo: seat.seatNo,
+            );
+          }
         }
         continue;
       }
@@ -508,25 +749,69 @@ class ApiSeatBooker {
 
     final primaryTarget = roomPlan[0];
     RoomInfo? primaryRoom;
-    try {
-      primaryRoom = await client.resolveRoom(
-        primaryTarget.campus,
-        primaryTarget.room,
-        dateStr,
-        stopToken: stopToken,
-      );
-    } on ProtocolDriftException catch (exc) {
-      _log('🛑 解析目标自习室失败，停止会话: ${exc.message}');
-      return AttackOutcome(
-        outcome: 'stopped',
-        resolvedRoomName: primaryTarget.room,
-      );
-    } on RateLimitCircuitOpenException catch (exc) {
-      _log('🛑 解析目标自习室失败，停止会话: ${exc.message}');
-      return AttackOutcome(
-        outcome: 'stopped',
-        resolvedRoomName: primaryTarget.room,
-      );
+    for (var prepTry = 1; prepTry <= 4; prepTry++) {
+      try {
+        primaryRoom = await client.resolveRoom(
+          primaryTarget.campus,
+          primaryTarget.room,
+          dateStr,
+          stopToken: stopToken,
+        );
+        break;
+      } on ProtocolDriftException catch (exc) {
+        _log('🛑 解析目标自习室失败，停止会话: ${exc.message}');
+        return AttackOutcome(
+          outcome: 'stopped',
+          resolvedRoomName: primaryTarget.room,
+        );
+      } on RateLimitCircuitOpenException catch (exc) {
+        _log('🛑 解析目标自习室失败，停止会话: ${exc.message}');
+        return AttackOutcome(
+          outcome: 'stopped',
+          resolvedRoomName: primaryTarget.room,
+        );
+      } on TransientServerBusyException catch (exc) {
+        if (prepTry >= 4) {
+          _log('🛑 解析目标自习室连续繁忙，停止会话: ${exc.message}');
+          return AttackOutcome(
+            outcome: 'stopped',
+            resolvedRoomName: primaryTarget.room,
+          );
+        }
+        _log('⏳ 解析目标自习室遇繁忙 ($prepTry/4): ${exc.message}，退避重试...');
+        try {
+          if (!await client.rateLimiter.waitBackoff(
+            stopToken: stopToken,
+            isRateLimit: exc.isRateLimit,
+          )) {
+            return AttackOutcome(
+              outcome: 'stopped',
+              resolvedRoomName: primaryTarget.room,
+            );
+          }
+        } on RateLimitCircuitOpenException catch (rlExc) {
+          _log('🛑 ${rlExc.message}');
+          return AttackOutcome(
+            outcome: 'stopped',
+            resolvedRoomName: primaryTarget.room,
+          );
+        }
+      } on DioException catch (exc) {
+        if (prepTry >= 4) {
+          _log('🛑 解析目标自习室网络异常，停止会话: ${exc.message}');
+          return AttackOutcome(
+            outcome: 'stopped',
+            resolvedRoomName: primaryTarget.room,
+          );
+        }
+        _log('⚠️ 解析目标自习室网络异常 ($prepTry/4): ${exc.message}，退避重试...');
+        if (!await client.rateLimiter.waitBackoff(stopToken: stopToken)) {
+          return AttackOutcome(
+            outcome: 'stopped',
+            resolvedRoomName: primaryTarget.room,
+          );
+        }
+      }
     }
 
     if (primaryRoom == null) {
@@ -537,20 +822,76 @@ class ApiSeatBooker {
       );
     }
 
-    List<SeatCandidate> primarySeats;
-    try {
-      primarySeats = await client.listRoomSeats(
-        primaryRoom.roomId,
-        dateStr,
-        stopToken: stopToken,
-      );
-      client.rateLimiter.markSeatsRefreshed();
-    } catch (exc) {
-      _log('🛑 拉取自习室座位布局失败，停止会话: $exc');
-      return AttackOutcome(
-        outcome: 'stopped',
-        resolvedRoomName: primaryRoom.roomName,
-      );
+    var primarySeats = const <SeatCandidate>[];
+    for (var layoutTry = 1; layoutTry <= 4; layoutTry++) {
+      try {
+        primarySeats = await client.listRoomSeats(
+          primaryRoom.roomId,
+          dateStr,
+          stopToken: stopToken,
+        );
+        client.rateLimiter.markSeatsRefreshed();
+        break;
+      } on ProtocolDriftException catch (exc) {
+        _log('🛑 拉取自习室座位布局失败，停止会话: ${exc.message}');
+        return AttackOutcome(
+          outcome: 'stopped',
+          resolvedRoomName: primaryRoom.roomName,
+        );
+      } on RateLimitCircuitOpenException catch (exc) {
+        _log('🛑 拉取自习室座位布局失败，停止会话: ${exc.message}');
+        return AttackOutcome(
+          outcome: 'stopped',
+          resolvedRoomName: primaryRoom.roomName,
+        );
+      } on TransientServerBusyException catch (exc) {
+        if (layoutTry >= 4) {
+          _log('🛑 拉取自习室座位布局连续繁忙，停止会话: ${exc.message}');
+          return AttackOutcome(
+            outcome: 'stopped',
+            resolvedRoomName: primaryRoom.roomName,
+          );
+        }
+        _log('⏳ 拉取自习室布局遇繁忙 ($layoutTry/4): ${exc.message}，退避重试...');
+        try {
+          if (!await client.rateLimiter.waitBackoff(
+            stopToken: stopToken,
+            isRateLimit: exc.isRateLimit,
+          )) {
+            return AttackOutcome(
+              outcome: 'stopped',
+              resolvedRoomName: primaryRoom.roomName,
+            );
+          }
+        } on RateLimitCircuitOpenException catch (rlExc) {
+          _log('🛑 ${rlExc.message}');
+          return AttackOutcome(
+            outcome: 'stopped',
+            resolvedRoomName: primaryRoom.roomName,
+          );
+        }
+      } on DioException catch (exc) {
+        if (layoutTry >= 4) {
+          _log('🛑 拉取自习室座位布局网络异常，停止会话: ${exc.message}');
+          return AttackOutcome(
+            outcome: 'stopped',
+            resolvedRoomName: primaryRoom.roomName,
+          );
+        }
+        _log('⚠️ 拉取自习室布局网络异常 ($layoutTry/4): ${exc.message}，退避重试...');
+        if (!await client.rateLimiter.waitBackoff(stopToken: stopToken)) {
+          return AttackOutcome(
+            outcome: 'stopped',
+            resolvedRoomName: primaryRoom.roomName,
+          );
+        }
+      } catch (exc) {
+        _log('🛑 拉取自习室座位布局失败，停止会话: $exc');
+        return AttackOutcome(
+          outcome: 'stopped',
+          resolvedRoomName: primaryRoom.roomName,
+        );
+      }
     }
 
     final freeCnt =
@@ -643,12 +984,21 @@ class ApiSeatBooker {
           fallbackQueue = List<SeatCandidate>.from(initialQueues.fallback);
         } else {
           _log('🔀 主自习室已耗尽，切换备选自习室: ${target.campus} -> ${target.room}');
-          final resolved = await client.resolveRoom(
-            target.campus,
-            target.room,
-            dateStr,
-            stopToken: stopToken,
-          );
+          RoomInfo? resolved;
+          try {
+            resolved = await client.resolveRoom(
+              target.campus,
+              target.room,
+              dateStr,
+              stopToken: stopToken,
+            );
+          } on TransientServerBusyException catch (exc) {
+            _log('⏳ 解析备选自习室 ${target.room} 遇繁忙，跳过: ${exc.message}');
+            continue;
+          } on DioException catch (exc) {
+            _log('⚠️ 解析备选自习室 ${target.room} 网络异常，跳过: ${exc.message}');
+            continue;
+          }
           if (resolved == null) {
             _log('⚠️ 备选自习室未找到，跳过: ${target.campus} / ${target.room}');
             continue;
@@ -658,12 +1008,54 @@ class ApiSeatBooker {
             _log('⏭️ 备选自习室 ${room.roomName} 当前无空座，跳过');
             continue;
           }
-          final liveSeats = await client.listRoomSeats(
-            room.roomId,
-            dateStr,
-            stopToken: stopToken,
-          );
-          client.rateLimiter.markSeatsRefreshed();
+          List<SeatCandidate>? liveSeats;
+          for (var fbTry = 1; fbTry <= 3; fbTry++) {
+            try {
+              liveSeats = await client.listRoomSeats(
+                room.roomId,
+                dateStr,
+                stopToken: stopToken,
+              );
+              client.rateLimiter.markSeatsRefreshed();
+              break;
+            } on TransientServerBusyException catch (exc) {
+              if (fbTry >= 3) {
+                _log('⚠️ 拉取备选房 ${room.roomName} 座位布局繁忙，跳过: ${exc.message}');
+                break;
+              }
+              try {
+                if (!await client.rateLimiter.waitBackoff(
+                  stopToken: stopToken,
+                  isRateLimit: exc.isRateLimit,
+                )) {
+                  return AttackOutcome(
+                    outcome: 'stopped',
+                    resolvedRoomName: room.roomName,
+                  );
+                }
+              } on RateLimitCircuitOpenException catch (rlExc) {
+                _log('🛑 ${rlExc.message}');
+                return AttackOutcome(
+                  outcome: 'stopped',
+                  resolvedRoomName: room.roomName,
+                );
+              }
+            } on DioException catch (exc) {
+              if (fbTry >= 3) {
+                _log('⚠️ 拉取备选房 ${room.roomName} 座位布局网络异常，跳过: ${exc.message}');
+                break;
+              }
+              if (!await client.rateLimiter.waitBackoff(stopToken: stopToken)) {
+                return AttackOutcome(
+                  outcome: 'stopped',
+                  resolvedRoomName: room.roomName,
+                );
+              }
+            }
+          }
+          if (liveSeats == null || liveSeats.isEmpty) {
+            continue;
+          }
           final planned = planSeatCandidates(
             const <String>[],
             liveSeats,
@@ -695,8 +1087,10 @@ class ApiSeatBooker {
             continue;
           }
 
+          // 定时模式首选耗尽进入兜底前才刷新一次实时空座；若未配首选（triedSeatIds 为空）则直接用 06:29:45 刚拉好的全空快照，避免 06:30:00 浪费 250ms
           if (tag == '兜底' &&
               fireAt != null &&
+              triedSeatIds.isNotEmpty &&
               !refreshedAfterPref &&
               client.rateLimiter.canRefreshSeats()) {
             refreshedAfterPref = true;

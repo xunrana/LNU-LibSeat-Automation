@@ -22,10 +22,10 @@ class RateLimiterConfig:
     jitter_ms: float = 40.0
     seat_refresh_cooldown_s: float = 1.5
     backoff_base_s: float = 0.2
-    backoff_max_s: float = 6.0
-    throttle_backoff_base_s: float = 3.0
-    max_consecutive_throttles: int = 5
-    max_session_requests: int = 160
+    backoff_max_s: float = 4.0
+    throttle_backoff_base_s: float = 0.8
+    max_consecutive_throttles: int = 12
+    max_session_requests: int = 200
 
 
 def _interruptible_sleep(

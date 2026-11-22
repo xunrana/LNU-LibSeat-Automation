@@ -55,6 +55,8 @@ from core.protocol import (
     GlobalConfig,
     ProtocolDriftError,
     TokenExpiredError,
+    TransientServerBusyError,
+    is_transient_busy_text,
     parse_global_js,
 )
 from core.rate_limiter import RateLimitCircuitOpenError, RateLimiter
@@ -493,6 +495,11 @@ class HttpLibSeatClient:
                     req_summary=params,
                     error=f"non_json: {snippet}",
                 )
+            if resp.status_code >= 500 or is_transient_busy_text(snippet):
+                raise TransientServerBusyError(
+                    f"端点 {path} 返回瞬态非 JSON 响应 (HTTP {resp.status_code}): {snippet!r}",
+                    is_rate_limit=is_transient_busy_text(snippet),
+                ) from exc
             raise ProtocolDriftError(f"端点 {path} 返回非 JSON 响应 (HTTP {resp.status_code}): {snippet!r}") from exc
 
         if not isinstance(data, dict):
@@ -514,7 +521,13 @@ class HttpLibSeatClient:
         if str(data.get("code") or "") == TOKEN_EXPIRED_CODE:
             raise TokenExpiredError(biz_msg or "token 已过期，请重新登录")
 
-        if 200 <= resp.status_code < 300:
+        if resp.status_code >= 500:
+            raise TransientServerBusyError(
+                f"端点 {path} 返回 HTTP {resp.status_code}: {biz_msg or data.get('status') or ''}",
+                is_rate_limit=is_transient_busy_text(biz_msg),
+            )
+
+        if 200 <= resp.status_code < 300 and not is_transient_busy_text(biz_msg):
             self._rate_limiter.record_success()
 
         return data
@@ -552,8 +565,11 @@ class HttpLibSeatClient:
         captcha_id = str(data.get("captchaId") or "").strip()
         captcha_image = str(data.get("captchaImage") or "").strip()
         if not captcha_id or not captcha_image:
-            if _is_maintenance_text(str(data.get("message") or "")):
+            msg = str(data.get("message") or "")
+            if _is_maintenance_text(msg):
                 return "", b""
+            if is_transient_busy_text(msg):
+                raise TransientServerBusyError(f"/auth/createCaptcha 暂不可用: {msg}", is_rate_limit=True)
             raise ProtocolDriftError(f"/auth/createCaptcha 缺少 captchaId/captchaImage 字段: keys={list(data.keys())}")
         return captcha_id, _decode_data_url(captcha_image)
 
@@ -566,7 +582,10 @@ class HttpLibSeatClient:
             stop_event=stop_event,
         )
         if data.get("status") != "success" or not isinstance(data.get("data"), dict):
-            raise ProtocolDriftError(f"/rest/v2/user 响应异常: {data.get('message') or data.get('status')}")
+            msg = str(data.get("message") or data.get("status") or "")
+            if is_transient_busy_text(msg):
+                raise TransientServerBusyError(f"/rest/v2/user 暂不可用: {msg}", is_rate_limit=True)
+            raise ProtocolDriftError(f"/rest/v2/user 响应异常: {msg}")
         u = data["data"]
         uid = u.get("id")
         if uid is None:
@@ -628,6 +647,14 @@ class HttpLibSeatClient:
                 return LoginResponse(ok=False, reason="protocol_drift", message=str(exc))
             except RateLimitCircuitOpenError as exc:
                 return LoginResponse(ok=False, reason="rate_limited", message=str(exc))
+            except TransientServerBusyError as exc:
+                logger.warning("⚠️ [%s] 第 %d/%d 次登录遇服务端繁忙: %s", account, attempt, max_attempts, exc)
+                try:
+                    if not self._rate_limiter.wait_backoff(stop_event=stop_event, is_rate_limit=exc.is_rate_limit):
+                        return LoginResponse(ok=False, reason="stopped", message="收到停止信号")
+                except RateLimitCircuitOpenError as rl_exc:
+                    return LoginResponse(ok=False, reason="rate_limited", message=str(rl_exc))
+                continue
             except requests.RequestException as exc:
                 logger.warning("⚠️ [%s] 第 %d/%d 次登录网络异常: %s", account, attempt, max_attempts, exc)
                 if not self._rate_limiter.wait_backoff(stop_event=stop_event):
@@ -647,12 +674,29 @@ class HttpLibSeatClient:
                         message="/rest/auth 成功响应缺少 data.token",
                     )
                 self._token = str(payload["token"])
-                try:
-                    self._profile = self._fetch_user_profile(stop_event=stop_event)
-                except ProtocolDriftError as exc:
-                    return LoginResponse(ok=False, reason="protocol_drift", message=str(exc))
-                except (requests.RequestException, TokenExpiredError) as exc:
-                    return LoginResponse(ok=False, reason="network_error", message=str(exc))
+                profile_err: Exception | None = None
+                for prof_try in range(1, 4):
+                    try:
+                        self._profile = self._fetch_user_profile(stop_event=stop_event)
+                        profile_err = None
+                        break
+                    except ProtocolDriftError as exc:
+                        return LoginResponse(ok=False, reason="protocol_drift", message=str(exc))
+                    except TransientServerBusyError as exc:
+                        profile_err = exc
+                        logger.warning("⚠️ [%s] 拉取用户信息繁忙 (%d/3): %s", account, prof_try, exc)
+                        try:
+                            if not self._rate_limiter.wait_backoff(
+                                stop_event=stop_event,
+                                is_rate_limit=exc.is_rate_limit,
+                            ):
+                                return LoginResponse(ok=False, reason="stopped", message="收到停止信号")
+                        except RateLimitCircuitOpenError as rl_exc:
+                            return LoginResponse(ok=False, reason="rate_limited", message=str(rl_exc))
+                    except (requests.RequestException, TokenExpiredError) as exc:
+                        return LoginResponse(ok=False, reason="network_error", message=str(exc))
+                if profile_err is not None:
+                    return LoginResponse(ok=False, reason="network_error", message=str(profile_err))
 
                 return LoginResponse(
                     ok=True,
@@ -682,7 +726,13 @@ class HttpLibSeatClient:
             params = {"token": self._token} if self._token else None
             data = self._request_json("keepalive", "GET", path, params=params, stop_event=stop_event)
             return data.get("status") == "success"
-        except (requests.RequestException, InterruptedError, TokenExpiredError, ProtocolDriftError):
+        except (
+            requests.RequestException,
+            InterruptedError,
+            TokenExpiredError,
+            ProtocolDriftError,
+            TransientServerBusyError,
+        ):
             return False
 
     def list_active_reservations(
@@ -734,7 +784,10 @@ class HttpLibSeatClient:
             stop_event=stop_event,
         )
         if data.get("status") != "success" or not isinstance(data.get("data"), dict):
-            raise ProtocolDriftError(f"/rest/v2/free/filters 响应异常: {data.get('message')}")
+            msg = str(data.get("message") or data.get("status") or "")
+            if is_transient_busy_text(msg):
+                raise TransientServerBusyError(f"/rest/v2/free/filters 暂不可用: {msg}", is_rate_limit=True)
+            raise ProtocolDriftError(f"/rest/v2/free/filters 响应异常: {msg}")
         payload = data["data"]
 
         buildings: dict[str, str] = {}
@@ -780,7 +833,10 @@ class HttpLibSeatClient:
             stop_event=stop_event,
         )
         if data.get("status") != "success" or not isinstance(data.get("data"), list):
-            raise ProtocolDriftError(f"{path} 响应异常: {data.get('message')}")
+            msg = str(data.get("message") or data.get("status") or "")
+            if is_transient_busy_text(msg):
+                raise TransientServerBusyError(f"{path} 暂不可用: {msg}", is_rate_limit=True)
+            raise ProtocolDriftError(f"{path} 响应异常: {msg}")
 
         stats: list[RoomStats] = []
         for item in data["data"]:
@@ -865,7 +921,10 @@ class HttpLibSeatClient:
             stop_event=stop_event,
         )
         if data.get("status") != "success" or not isinstance(data.get("data"), dict):
-            raise ProtocolDriftError(f"{path} 响应异常: {data.get('message')}")
+            msg = str(data.get("message") or data.get("status") or "")
+            if is_transient_busy_text(msg):
+                raise TransientServerBusyError(f"{path} 暂不可用: {msg}", is_rate_limit=True)
+            raise ProtocolDriftError(f"{path} 响应异常: {msg}")
         layout = data["data"].get("layout")
         if not isinstance(layout, dict):
             raise ProtocolDriftError(f"{path} 响应缺少 data.layout 字典")
@@ -953,8 +1012,14 @@ class HttpLibSeatClient:
             params={"username": username},
             stop_event=stop_event,
         )
-        if str(data.get("status") or "").upper() != "OK":
+        status_upper = str(data.get("status") or "").upper()
+        if status_upper != "OK":
             msg = str(data.get("message") or data.get("status") or "")
+            if is_transient_busy_text(msg) or status_upper == "FAIL":
+                raise TransientServerBusyError(
+                    f"/cap/captcha 暂不可用: {msg}",
+                    is_rate_limit=True,
+                )
             raise ProtocolDriftError(f"/cap/captcha 返回非 OK: {msg}")
         cap_token = str(data.get("token") or "").strip()
         bg_raw = str(data.get("image") or "")

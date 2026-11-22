@@ -14,6 +14,7 @@ import '../logic/orchestrator.dart';
 import '../logic/seat_strategy.dart';
 import 'background_scheduler.dart';
 import 'config_store.dart';
+import 'log_exporter.dart';
 import 'notification_service.dart';
 
 enum RushStepStage {
@@ -194,6 +195,12 @@ class MobileRushController extends ChangeNotifier {
     if (logEntries.length > 500) {
       logEntries.removeRange(0, logEntries.length - 500);
     }
+    MobileLogExporter.appendPersistentRunLog(
+      config.logBaseDir,
+      account,
+      message,
+      beijingTime: bj,
+    );
     statusLabel = message;
     _inferStageFromLog(message);
     notifyListeners();

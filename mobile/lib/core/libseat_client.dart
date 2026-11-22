@@ -960,6 +960,12 @@ class HttpLibSeatClient implements LibSeatClient {
         reqSummary: params,
         error: 'non_json: $snippet',
       );
+      if (code >= 500 || isTransientBusyText(snippet)) {
+        throw TransientServerBusyException(
+          '端点 $path 返回瞬态非 JSON 响应 (HTTP $code): $snippet',
+          isRateLimit: isTransientBusyText(snippet),
+        );
+      }
       throw ProtocolDriftException(
         '端点 $path 返回非 JSON 响应 (HTTP $code): $snippet',
       );
@@ -996,7 +1002,14 @@ class HttpLibSeatClient implements LibSeatClient {
       );
     }
 
-    if (code >= 200 && code < 300) {
+    if (code >= 500) {
+      throw TransientServerBusyException(
+        '端点 $path 返回 HTTP $code: ${bizMsg.isNotEmpty ? bizMsg : (decoded['status'] ?? '')}',
+        isRateLimit: isTransientBusyText(bizMsg),
+      );
+    }
+
+    if (code >= 200 && code < 300 && !isTransientBusyText(bizMsg)) {
       _rateLimiter.recordSuccess();
     }
 
@@ -1047,8 +1060,12 @@ class HttpLibSeatClient implements LibSeatClient {
     final captchaId = (data['captchaId'] ?? '').toString().trim();
     final captchaImage = (data['captchaImage'] ?? '').toString().trim();
     if (captchaId.isEmpty || captchaImage.isEmpty) {
-      if (isMaintenanceText((data['message'] ?? '').toString())) {
+      final msg = (data['message'] ?? '').toString();
+      if (isMaintenanceText(msg)) {
         return ('', Uint8List(0));
+      }
+      if (isTransientBusyText(msg)) {
+        throw TransientServerBusyException('/auth/createCaptcha 暂不可用: $msg');
       }
       throw ProtocolDriftException(
         '/auth/createCaptcha 缺少 captchaId/captchaImage 字段: keys=${data.keys.toList()}',
@@ -1068,8 +1085,12 @@ class HttpLibSeatClient implements LibSeatClient {
       stopToken: stopToken,
     );
     if (data['status'] != 'success' || data['data'] is! Map) {
+      final msg = (data['message'] ?? data['status'] ?? '').toString();
+      if (isTransientBusyText(msg)) {
+        throw TransientServerBusyException('/rest/v2/user 暂不可用: $msg');
+      }
       throw ProtocolDriftException(
-        '/rest/v2/user 响应异常: ${data['message'] ?? data['status']}',
+        '/rest/v2/user 响应异常: $msg',
       );
     }
     final u = Map<String, dynamic>.from(data['data'] as Map);
@@ -1167,6 +1188,27 @@ class HttpLibSeatClient implements LibSeatClient {
           reason: LoginFailureReason.rateLimited,
           message: exc.message,
         );
+      } on TransientServerBusyException catch (exc) {
+        try {
+          final cont = await _rateLimiter.waitBackoff(
+            stopToken: stopToken,
+            isRateLimit: exc.isRateLimit,
+          );
+          if (!cont) {
+            return const LoginResponse(
+              ok: false,
+              reason: LoginFailureReason.stopped,
+              message: '收到停止信号',
+            );
+          }
+        } on RateLimitCircuitOpenException catch (rlExc) {
+          return LoginResponse(
+            ok: false,
+            reason: LoginFailureReason.rateLimited,
+            message: rlExc.message,
+          );
+        }
+        continue;
       } on DioException {
         final cont = await _rateLimiter.waitBackoff(stopToken: stopToken);
         if (!cont) {
@@ -1199,19 +1241,52 @@ class HttpLibSeatClient implements LibSeatClient {
           );
         }
         _token = payload['token'].toString();
-        try {
-          _profile = await _fetchUserProfile(stopToken: stopToken);
-        } on ProtocolDriftException catch (exc) {
-          return LoginResponse(
-            ok: false,
-            reason: LoginFailureReason.protocolDrift,
-            message: exc.message,
-          );
-        } catch (exc) {
+        String? profileBusyErr;
+        for (var profTry = 1; profTry <= 3; profTry++) {
+          try {
+            _profile = await _fetchUserProfile(stopToken: stopToken);
+            profileBusyErr = null;
+            break;
+          } on ProtocolDriftException catch (exc) {
+            return LoginResponse(
+              ok: false,
+              reason: LoginFailureReason.protocolDrift,
+              message: exc.message,
+            );
+          } on TransientServerBusyException catch (exc) {
+            profileBusyErr = exc.message;
+            try {
+              final cont = await _rateLimiter.waitBackoff(
+                stopToken: stopToken,
+                isRateLimit: exc.isRateLimit,
+              );
+              if (!cont) {
+                return const LoginResponse(
+                  ok: false,
+                  reason: LoginFailureReason.stopped,
+                  message: '收到停止信号',
+                );
+              }
+            } on RateLimitCircuitOpenException catch (rlExc) {
+              return LoginResponse(
+                ok: false,
+                reason: LoginFailureReason.rateLimited,
+                message: rlExc.message,
+              );
+            }
+          } catch (exc) {
+            return LoginResponse(
+              ok: false,
+              reason: LoginFailureReason.networkError,
+              message: exc.toString(),
+            );
+          }
+        }
+        if (profileBusyErr != null) {
           return LoginResponse(
             ok: false,
             reason: LoginFailureReason.networkError,
-            message: exc.toString(),
+            message: profileBusyErr,
           );
         }
 
@@ -1330,8 +1405,12 @@ class HttpLibSeatClient implements LibSeatClient {
       stopToken: stopToken,
     );
     if (data['status'] != 'success' || data['data'] is! Map) {
+      final msg = (data['message'] ?? data['status'] ?? '').toString();
+      if (isTransientBusyText(msg)) {
+        throw TransientServerBusyException('/rest/v2/free/filters 暂不可用: $msg');
+      }
       throw ProtocolDriftException(
-        '/rest/v2/free/filters 响应异常: ${data['message']}',
+        '/rest/v2/free/filters 响应异常: $msg',
       );
     }
     final payload = Map<String, dynamic>.from(data['data'] as Map);
@@ -1405,7 +1484,11 @@ class HttpLibSeatClient implements LibSeatClient {
       stopToken: stopToken,
     );
     if (data['status'] != 'success' || data['data'] is! List) {
-      throw ProtocolDriftException('$path 响应异常: ${data['message']}');
+      final msg = (data['message'] ?? data['status'] ?? '').toString();
+      if (isTransientBusyText(msg)) {
+        throw TransientServerBusyException('$path 暂不可用: $msg');
+      }
+      throw ProtocolDriftException('$path 响应异常: $msg');
     }
 
     final stats = <RoomStats>[];
@@ -1512,7 +1595,11 @@ class HttpLibSeatClient implements LibSeatClient {
       stopToken: stopToken,
     );
     if (data['status'] != 'success' || data['data'] is! Map) {
-      throw ProtocolDriftException('$path 响应异常: ${data['message']}');
+      final msg = (data['message'] ?? data['status'] ?? '').toString();
+      if (isTransientBusyText(msg)) {
+        throw TransientServerBusyException('$path 暂不可用: $msg');
+      }
+      throw ProtocolDriftException('$path 响应异常: $msg');
     }
     final payload = data['data'] as Map;
     final layout = payload['layout'];
@@ -1557,8 +1644,15 @@ class HttpLibSeatClient implements LibSeatClient {
       params: <String, dynamic>{'username': username},
       stopToken: stopToken,
     );
-    if ((data['status'] ?? '').toString().toUpperCase() != 'OK') {
+    final statusUpper = (data['status'] ?? '').toString().toUpperCase();
+    if (statusUpper != 'OK') {
       final msg = (data['message'] ?? data['status'] ?? '').toString();
+      if (isTransientBusyText(msg) || statusUpper == 'FAIL') {
+        throw TransientServerBusyException(
+          '/cap/captcha 暂不可用: $msg',
+          isRateLimit: true,
+        );
+      }
       throw ProtocolDriftException('/cap/captcha 返回非 OK: $msg');
     }
     final capToken = (data['token'] ?? '').toString().trim();

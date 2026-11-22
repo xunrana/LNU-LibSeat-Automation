@@ -14,10 +14,12 @@ import 'package:lnu_libseat_mobile/core/libseat_client.dart';
 import 'package:lnu_libseat_mobile/core/protocol.dart';
 import 'package:lnu_libseat_mobile/core/rate_limiter.dart';
 import 'package:lnu_libseat_mobile/core/session_recorder.dart';
+import 'package:lnu_libseat_mobile/logic/booker.dart';
 import 'package:lnu_libseat_mobile/logic/result_classifier.dart';
 import 'package:lnu_libseat_mobile/logic/seat_strategy.dart';
 import 'package:lnu_libseat_mobile/services/background_scheduler.dart';
 import 'package:lnu_libseat_mobile/services/config_store.dart';
+import 'package:lnu_libseat_mobile/services/log_exporter.dart';
 import 'package:lnu_libseat_mobile/services/notification_service.dart';
 import 'package:lnu_libseat_mobile/services/rush_controller.dart';
 
@@ -611,7 +613,7 @@ void main() {
     );
   });
 
-  test('CancelTokenSource.nudge() 可立刻唤醒休眠且不触发取消', () async {
+  test('CancelTokenSource.nudge() 可立刻唤醒休眠且不触发取消，sleepExact 不受 nudge 截断', () async {
     final token = CancelTokenSource();
     final sw = Stopwatch()..start();
     Future<void>.delayed(const Duration(milliseconds: 40), token.nudge);
@@ -621,6 +623,14 @@ void main() {
     expect(token.isCancelled, isFalse);
     expect(sw.elapsedMilliseconds, lessThan(1000));
 
+    // sleepExact 不受 nudge() 提前打断，仅响应真实时长或 cancel()
+    final swExact = Stopwatch()..start();
+    Future<void>.delayed(const Duration(milliseconds: 25), token.nudge);
+    final exactOk = await token.sleepExact(const Duration(milliseconds: 90));
+    swExact.stop();
+    expect(exactOk, isTrue);
+    expect(swExact.elapsedMilliseconds, greaterThanOrEqualTo(75));
+
     // 确认 cancel() 仍返回 false
     Future<void>.delayed(const Duration(milliseconds: 30), token.cancel);
     final cancelledOk =
@@ -628,4 +638,329 @@ void main() {
     expect(cancelledOk, isFalse);
     expect(token.isCancelled, isTrue);
   });
+
+  test('06:30 高峰「系统繁忙, 请稍后: 05/06」退避重试且不触发协议漂移停机 + 无首选不重复刷图', () async {
+    expect(isTransientBusyText('系统繁忙, 请稍后: 05'), isTrue);
+    expect(isTransientBusyText('系统繁忙, 请稍后: 06'), isTrue);
+    expect(isTransientBusyText('系统维护中，请稍后再试'), isFalse);
+
+    final okChallenge = ClickCaptchaChallenge(
+      token: 'c' * 32,
+      wordCheckCount: 3,
+      targetBytes: Uint8List.fromList(<int>[1, 2, 3]),
+      bgBytes: Uint8List.fromList(<int>[4, 5, 6]),
+    );
+    final fakeClient = _MockPeakBusyClient(
+      fetchQueue: <Object>[
+        okChallenge,
+        const TransientServerBusyException('/cap/captcha 暂不可用: 系统繁忙, 请稍后: 05'),
+        const TransientServerBusyException('/cap/captcha 暂不可用: 系统繁忙, 请稍后: 06'),
+        okChallenge,
+        okChallenge,
+      ],
+      checkQueue: <ClickCaptchaCheckResult>[
+        const ClickCaptchaCheckResult(ok: false, message: '验证失败'),
+        const ClickCaptchaCheckResult(ok: true),
+        const ClickCaptchaCheckResult(ok: true),
+      ],
+      bookQueue: <BookResponse>[
+        const BookResponse(status: ApiOutcomeStatus.retryCaptcha, message: '验证码错误'),
+        const BookResponse(
+          status: ApiOutcomeStatus.success,
+          seatNo: '72',
+          reservationId: '8899',
+          receipt: 'R-8899',
+        ),
+      ],
+    );
+
+    final booker = ApiSeatBooker(
+      client: fakeClient,
+      account: '20250000001',
+      captchaService: _StubCaptchaService(),
+      peakMinSolveDuration: Duration.zero,
+      peakPostCheckDuration: Duration.zero,
+      peakRetryCooldownDuration: Duration.zero,
+    );
+
+    final fireAt = DateTime.utc(2026, 11, 22, 6, 30, 0);
+    final outcome = await booker.attackRooms(
+      roomPlan: const <RoomTarget>[RoomTarget('崇山校区图书馆', '四楼南自习室')],
+      preferSeats: const <String>[],
+      startTime: '08:00',
+      endTime: '14:00',
+      schedule: RushSchedule(
+        runDate: DateTime.utc(2026, 11, 22),
+        prepAt: fireAt.subtract(const Duration(seconds: 15)),
+        keepaliveAt: fireAt.subtract(const Duration(seconds: 5)),
+        fireAt: fireAt,
+      ),
+      stopToken: CancelTokenSource(),
+      coordinator: SeatClaimCoordinator(),
+      waitUntilFn: (_, __, ___, ____, _____) async => true,
+    );
+
+    expect(outcome.outcome, equals('success'));
+    expect(outcome.bookResponse?.reservationId, equals('8899'));
+    expect(fakeClient.fetchCalls, equals(5));
+    // 无首选座时 06:30:00 不重复拉 room_layout（仅预热期 1 次）
+    expect(fakeClient.listSeatsCalls, equals(1));
+  });
+
+  test('移动端日志持久化、双账号最近批次筛选与全量 ZIP 打包', () {
+    final tmpDir = Directory.systemTemp.createTempSync('lnu_log_export_test_');
+    try {
+      MobileLogExporter.appendPersistentRunLog(
+        tmpDir,
+        'system',
+        'LNU LibSeat 约座引擎已启动',
+        beijingTime: DateTime.utc(2026, 11, 22, 6, 29, 45),
+      );
+      final s1 = Directory('${tmpDir.path}/sessions/20261122_062945_20240001')
+        ..createSync(recursive: true);
+      final s2 = Directory('${tmpDir.path}/sessions/20261122_062947_20240002')
+        ..createSync(recursive: true);
+      final oldS = Directory('${tmpDir.path}/sessions/20261121_150000_20240001')
+        ..createSync(recursive: true);
+
+      File('${s1.path}/http_trace.jsonl').writeAsStringSync('{"stage":"free_book"}\n');
+      File('${s1.path}/抢座顺序.txt').writeAsStringSync('1. 座位 72\n');
+      File('${s2.path}/http_trace.jsonl').writeAsStringSync('{"stage":"free_book"}\n');
+      File('${oldS.path}/http_trace.jsonl').writeAsStringSync('{"stage":"old"}\n');
+
+      final inv = MobileLogExporter.scanInventory(tmpDir);
+      expect(inv.sessionCount, equals(3));
+      expect(inv.fileCount, equals(5));
+
+      final latest = MobileLogExporter.collectLatestRushFiles(tmpDir);
+      final latestPaths = latest.map((f) => f.path).join('|');
+      expect(latestPaths, contains('run_log.txt'));
+      expect(latestPaths, contains('20261122_062945_20240001'));
+      expect(latestPaths, contains('20261122_062947_20240002'));
+      expect(latestPaths, isNot(contains('20261121_150000_20240001')));
+
+      final zipFile = MobileLogExporter.exportAllLogsToZip(tmpDir);
+      expect(zipFile, isNotNull);
+      expect(zipFile!.existsSync(), isTrue);
+      final bytes = zipFile.readAsBytesSync();
+      // PK\x03\x04 Local File Header magic & PK\x05\x06 EOCD magic
+      expect(bytes[0], equals(0x50));
+      expect(bytes[1], equals(0x4B));
+      expect(bytes[2], equals(0x03));
+      expect(bytes[3], equals(0x04));
+      expect(bytes.length, greaterThan(100));
+    } finally {
+      tmpDir.deleteSync(recursive: true);
+    }
+  });
+}
+
+class _StubCaptchaService implements CaptchaService {
+  @override
+  bool get preloaded => true;
+
+  @override
+  String get lastPreloadError => '';
+
+  @override
+  Future<bool> preload({String account = 'system'}) async => true;
+
+  @override
+  Future<String> solveLoginCaptcha(Uint8List imageBytes) async => 'ab12';
+
+  @override
+  Future<CaptchaSolveOutcome> solve(
+    Uint8List targetBytes,
+    Uint8List bgBytes, {
+    CaptchaKind? kind,
+    int? hintCount,
+    DateTime? nowBeijing,
+  }) async {
+    return const CaptchaSolveOutcome(
+      ok: true,
+      kind: CaptchaKind.click3,
+      points: <CaptchaPoint>[
+        CaptchaPoint(10, 20),
+        CaptchaPoint(30, 40),
+        CaptchaPoint(50, 60),
+      ],
+      elapsedMs: 12.0,
+      decoder: 'ios_cpu',
+    );
+  }
+}
+
+class _MockPeakBusyClient implements LibSeatClient {
+  final List<Object> fetchQueue;
+  final List<ClickCaptchaCheckResult> checkQueue;
+  final List<BookResponse> bookQueue;
+  int fetchCalls = 0;
+  int listSeatsCalls = 0;
+
+  @override
+  final ClockSync clockSync = ClockSync();
+
+  @override
+  final RateLimiter rateLimiter = RateLimiter(
+    config: const RateLimiterConfig(
+      minIntervalMs: 0,
+      jitterMs: 0,
+      backoffBaseS: 0,
+      throttleBackoffBaseS: 0,
+      seatRefreshCooldownS: 0,
+    ),
+  );
+
+  _MockPeakBusyClient({
+    required this.fetchQueue,
+    required this.checkQueue,
+    required this.bookQueue,
+  });
+
+  @override
+  UserProfile? get profile => const UserProfile(userId: '10001', username: '20250000001');
+
+  @override
+  String get token => 't' * 48;
+
+  @override
+  Future<GlobalConfig> bootstrapGlobal({CancelTokenSource? stopToken}) async =>
+      const GlobalConfig();
+
+  @override
+  Future<LoginResponse> login(
+    String account,
+    String password, {
+    CancelTokenSource? stopToken,
+    int maxAttempts = 6,
+  }) async =>
+      LoginResponse(ok: true, token: token, profile: profile);
+
+  @override
+  Future<bool> keepalive({CancelTokenSource? stopToken}) async => true;
+
+  @override
+  Future<List<ReservationRecord>> listActiveReservations({
+    CancelTokenSource? stopToken,
+  }) async =>
+      const <ReservationRecord>[];
+
+  @override
+  Future<FiltersData> fetchFilters({CancelTokenSource? stopToken}) async =>
+      const FiltersData();
+
+  @override
+  Future<List<RoomStats>> listRoomStats(
+    String buildingId,
+    String dateStr, {
+    CancelTokenSource? stopToken,
+  }) async =>
+      const <RoomStats>[];
+
+  @override
+  Future<RoomInfo?> resolveRoom(
+    String campusName,
+    String roomName,
+    String dateStr, {
+    CancelTokenSource? stopToken,
+  }) async =>
+      const RoomInfo(
+        campusName: '崇山校区图书馆',
+        roomName: '四楼南自习室',
+        buildingId: '2',
+        roomId: '24',
+      );
+
+  @override
+  Future<List<SeatCandidate>> listRoomSeats(
+    String roomId,
+    String dateStr, {
+    CancelTokenSource? stopToken,
+  }) async {
+    listSeatsCalls += 1;
+    return const <SeatCandidate>[
+      SeatCandidate(seatNo: '72', seatId: '15072', roomId: '24', status: SeatStatus.free),
+    ];
+  }
+
+  @override
+  Future<ClickCaptchaChallenge> fetchClickCaptcha({
+    CancelTokenSource? stopToken,
+  }) async {
+    fetchCalls += 1;
+    final item = fetchQueue.removeAt(0);
+    if (item is Exception) {
+      throw item;
+    }
+    return item as ClickCaptchaChallenge;
+  }
+
+  @override
+  Future<ClickCaptchaCheckResult> checkClickCaptcha(
+    ClickCaptchaChallenge challenge,
+    List<CaptchaPoint> points, {
+    CancelTokenSource? stopToken,
+  }) async =>
+      checkQueue.removeAt(0);
+
+  @override
+  Future<BookResponse> freeBook({
+    required String seatId,
+    required String seatNo,
+    required String startTime,
+    required String endTime,
+    required String dateStr,
+    required String authid,
+    bool inOpenGraceWindow = false,
+    CancelTokenSource? stopToken,
+  }) async =>
+      bookQueue.removeAt(0);
+
+  @override
+  Future<bool> cancelReservation(
+    String reservationId, {
+    CancelTokenSource? stopToken,
+  }) async =>
+      true;
+
+  @override
+  Future<CancelReservationResult> cancelReservationDetail(
+    String reservationId, {
+    CancelTokenSource? stopToken,
+  }) async =>
+      const CancelReservationResult(ok: true);
+
+  @override
+  Future<List<AnnouncementItem>> fetchAnnouncements({
+    CancelTokenSource? stopToken,
+  }) async =>
+      const <AnnouncementItem>[];
+
+  @override
+  Future<List<HistoryRecord>> fetchHistory({
+    int page = 1,
+    int pageSize = 50,
+    CancelTokenSource? stopToken,
+  }) async =>
+      const <HistoryRecord>[];
+
+  @override
+  Future<List<SeatTimeOption>> listSeatStartTimes(
+    String seatId,
+    String dateStr, {
+    CancelTokenSource? stopToken,
+  }) async =>
+      const <SeatTimeOption>[];
+
+  @override
+  Future<List<SeatTimeOption>> listSeatEndTimes(
+    String seatId,
+    String dateStr,
+    String startId, {
+    CancelTokenSource? stopToken,
+  }) async =>
+      const <SeatTimeOption>[];
+
+  @override
+  void close() {}
 }

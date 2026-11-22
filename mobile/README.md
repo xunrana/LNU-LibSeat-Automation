@@ -80,7 +80,7 @@
 5. **本地无损 ONNX 识图（与桌面端精度一致）**
    - 内置 5 个原版无损 ONNX 模型（登录 4 位图形码 + Click1/Click3 的 YOLOv8 检测与 MobileNetV4 匹配，共 159.5 MB）。
    - 预处理完整移植了 Python Pillow 的重采样和灰度算法（已通过 SHA-256 逐字节单测校验），Android 用原生 CPU `BitmapFactory`、iOS 用原生 CPU `ImageIO` 解码，在独立 Isolate 推理，息屏后台不依赖 GPU。
-   - 在 **我的 → 运行记录与识图回放** 可查看每次验证码的红绿点，也能一键导出脱敏日志。
+   - 在 **我的 → 运行记录与识图回放** 可查看每次验证码的红绿点，支持导出**最近一轮完整日志（含双账号）**或**打包全部历史日志（`.zip`）**；iPhone 也可直接打开系统「文件」App →「我的 iPhone」→「LNU-LibSeat」随时查看。
 
 ---
 

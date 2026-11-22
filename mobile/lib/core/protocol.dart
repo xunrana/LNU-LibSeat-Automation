@@ -69,6 +69,33 @@ class ProtocolConstants {
     '系统维护',
     '维护中',
   ];
+
+  /// 高峰期瞬态繁忙/限流关键词（应退避重试，绝不能误判为协议漂移停机）。
+  static const List<String> transientBusyKeywords = <String>[
+    '系统繁忙',
+    '服务器繁忙',
+    '繁忙',
+    '操作过于频繁',
+    '请求过于频繁',
+    '请稍后',
+    '请稍候',
+    '请重试',
+    'too busy',
+    'try again',
+  ];
+}
+
+/// 判断服务端反馈是否属于高峰瞬态繁忙/频控（排除维护提示）。
+bool isTransientBusyText(String? text) {
+  final cleaned = (text ?? '').trim();
+  if (cleaned.isEmpty) {
+    return false;
+  }
+  if (ProtocolConstants.maintenanceKeywords.any(cleaned.contains)) {
+    return false;
+  }
+  final lowered = cleaned.toLowerCase();
+  return ProtocolConstants.transientBusyKeywords.any(lowered.contains);
 }
 
 /// 服务端响应结构/鉴权协议与已知契约不匹配时抛出，触发立即熔断停止。
@@ -78,6 +105,19 @@ class ProtocolDriftException implements Exception {
 
   @override
   String toString() => 'ProtocolDriftException: $message';
+}
+
+/// 服务端瞬态繁忙/网关 5xx/验证码池拥堵等可恢复异常，应退避重试而非熔断停机。
+class TransientServerBusyException implements Exception {
+  final String message;
+  final bool isRateLimit;
+  const TransientServerBusyException(
+    this.message, {
+    this.isRateLimit = true,
+  });
+
+  @override
+  String toString() => 'TransientServerBusyException: $message';
 }
 
 /// 服务端返回 code == '12'（token 已过期）时抛出，供上层按需重登。

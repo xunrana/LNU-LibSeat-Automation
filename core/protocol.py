@@ -61,13 +61,46 @@ UNAVAILABLE_SEAT_STATUSES = frozenset({"NOSELECT"})
 # 维护提示关键词
 MAINTENANCE_KEYWORDS = ("系统维护中", "系统维护", "维护中")
 
+# 高峰期瞬态繁忙/限流关键词（应退避重试，绝不能误判为协议漂移停机）
+TRANSIENT_BUSY_KEYWORDS = (
+    "系统繁忙",
+    "服务器繁忙",
+    "繁忙",
+    "操作过于频繁",
+    "请求过于频繁",
+    "请稍后",
+    "请稍候",
+    "请重试",
+    "too busy",
+    "try again",
+)
+
 _RE_BASEURL = re.compile(r'BASEURL\s*:\s*["\']([^"\']+)["\']')
 _RE_CODE = re.compile(r"CODE\s*:\s*(true|false)", re.I)
 _RE_NUMCODE = re.compile(r'NUMCODE\s*:\s*["\']([^"\']+)["\']')
 
 
+def is_transient_busy_text(text: str | None) -> bool:
+    """判断服务端反馈是否属于高峰瞬态繁忙/频控（排除维护提示）。"""
+    cleaned = (text or "").strip()
+    if not cleaned:
+        return False
+    if any(kw in cleaned for kw in MAINTENANCE_KEYWORDS):
+        return False
+    lowered = cleaned.lower()
+    return any(kw in lowered for kw in TRANSIENT_BUSY_KEYWORDS)
+
+
 class ProtocolDriftError(RuntimeError):
     """服务端响应结构/鉴权协议与已知契约不匹配时抛出，触发立即熔断停止。"""
+
+
+class TransientServerBusyError(RuntimeError):
+    """服务端瞬态繁忙/网关 5xx/验证码池拥堵等可恢复异常，应退避重试而非熔断停机。"""
+
+    def __init__(self, message: str, *, is_rate_limit: bool = True) -> None:
+        super().__init__(message)
+        self.is_rate_limit = is_rate_limit
 
 
 class TokenExpiredError(RuntimeError):

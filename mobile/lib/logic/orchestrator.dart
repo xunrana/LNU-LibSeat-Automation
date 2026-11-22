@@ -242,6 +242,13 @@ class MobileOrchestrator {
     final sessionDir = _createSessionDir(sessionCfg.baseLogDir, account);
     final recorder = SessionRecorder(sessionDir: sessionDir, account: account);
 
+    void sessionLog(String acc, String msg) {
+      final tag = '[$acc]';
+      final formatted = msg.contains(tag) ? msg : '$tag $msg';
+      recorder.appendSessionLog(formatted);
+      onLog?.call(acc, formatted);
+    }
+
     final client = clientFactory != null
         ? clientFactory(recorder)
         : HttpLibSeatClient(
@@ -253,7 +260,7 @@ class MobileOrchestrator {
           );
 
     try {
-      _log(account, '⚡ 纯 API 会话启动（手机端本地引擎）。');
+      sessionLog(account, '⚡ 纯 API 会话启动（手机端本地引擎）。');
 
       var effectiveMaint = maintenanceMode;
       if (effectiveMaint == null) {
@@ -273,18 +280,18 @@ class MobileOrchestrator {
       if (!loginRes.ok) {
         if (loginRes.reason == LoginFailureReason.maintenance) {
           if (effectiveMaint == 'defer_until_fire') {
-            _log(account, '⏸️ 收到维护提示，等待预约时刻重试登录: ${loginRes.message}');
+            sessionLog(account, '⏸️ 收到维护提示，等待预约时刻重试登录: ${loginRes.message}');
             return 'maintenance_retry_at_fire';
           }
           if (effectiveMaint == 'retry_later') {
-            _log(account, '⏳ 系统维护中，稍后按间隔重试: ${loginRes.message}');
+            sessionLog(account, '⏳ 系统维护中，稍后按间隔重试: ${loginRes.message}');
             return 'maintenance_retry_later';
           }
-          _log(account, '🛑 系统维护中，停止任务: ${loginRes.message}');
+          sessionLog(account, '🛑 系统维护中，停止任务: ${loginRes.message}');
           return 'stopped';
         }
         if (loginRes.reason == LoginFailureReason.protocolDrift) {
-          _log(
+          sessionLog(
             account,
             '🛑 检测到站点接口协议可能已变更: ${loginRes.message}（可在设置页导出脱敏日志排查）',
           );
@@ -294,7 +301,7 @@ class MobileOrchestrator {
             stopToken.isCancelled) {
           return 'stopped';
         }
-        _log(
+        sessionLog(
           account,
           '❌ 纯 API 登录失败 (${loginRes.reason.name}): ${loginRes.message}',
         );
@@ -303,7 +310,7 @@ class MobileOrchestrator {
 
       final uid = loginRes.profile?.userId ?? '-';
       final offStr = client.clockSync.offsetSeconds.toStringAsFixed(3);
-      _log(account, '✅ 纯 API 登录成功！(userId=$uid, clock_offset=${offStr}s)');
+      sessionLog(account, '✅ 纯 API 登录成功！(userId=$uid, clock_offset=${offStr}s)');
 
       final roomPlan = buildRoomPlan(
         sessionCfg.targetCampus,
@@ -315,7 +322,7 @@ class MobileOrchestrator {
         account: account,
         captchaService: captchaService,
         recorder: recorder,
-        onLog: onLog,
+        onLog: sessionLog,
         onCaptchaDiagnostic: onCaptchaDiagnostic,
       );
 
@@ -337,24 +344,24 @@ class MobileOrchestrator {
               token,
               stage,
               nowFn,
-              onLog: onLog,
+              onLog: sessionLog,
             ),
             fireOffsetMs: sessionCfg.apiFireOffsetMs,
           );
           break;
         } on TokenExpiredException catch (exc) {
           if (authRound >= 1 || stopToken.isCancelled) {
-            _log(account, '🛑 Token 连续过期，终止会话: ${exc.message}');
+            sessionLog(account, '🛑 Token 连续过期，终止会话: ${exc.message}');
             return 'stopped';
           }
-          _log(account, '🔄 检测到 Token 过期 (${exc.message})，正在自动重新登录...');
+          sessionLog(account, '🔄 检测到 Token 过期 (${exc.message})，正在自动重新登录...');
           final relogin = await client.login(
             account,
             accountCfg.password,
             stopToken: stopToken,
           );
           if (!relogin.ok) {
-            _log(account, '❌ 自动重新登录失败: ${relogin.message}');
+            sessionLog(account, '❌ 自动重新登录失败: ${relogin.message}');
             return 'stopped';
           }
         }
@@ -381,7 +388,7 @@ class MobileOrchestrator {
 
       return 'stopped';
     } catch (exc) {
-      _log(account, '❌ 纯 API 会话异常: $exc');
+      sessionLog(account, '❌ 纯 API 会话异常: $exc');
       return 'stopped';
     } finally {
       client.close();

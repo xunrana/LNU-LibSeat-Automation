@@ -126,6 +126,21 @@ class SessionRecorder {
         '${pad2(bj.hour)}:${pad2(bj.minute)}:${pad2(bj.second)}.${pad3(bj.millisecond)}';
   }
 
+  /// 追加一条会话运行日志到 `session.log`。
+  void appendSessionLog(String line) {
+    if (sessionDir == null) {
+      return;
+    }
+    try {
+      final logFile = File('${sessionDir!.path}/session.log');
+      logFile.writeAsStringSync(
+        '[${_beijingTimestamp()}] $line\n',
+        mode: FileMode.append,
+        flush: true,
+      );
+    } catch (_) {}
+  }
+
   /// 追加一条脱敏后的 HTTP 事务记录到 `http_trace.jsonl`。
   void recordHttp({
     required String stage,

@@ -66,6 +66,21 @@ class CancelTokenSource {
     ]);
     return !_cancelled;
   }
+
+  /// 精确时长可取消休眠：仅响应时长到期或 `cancel()`，不会被外部 `nudge()` 心跳提前截断。
+  Future<bool> sleepExact(Duration duration) async {
+    if (_cancelled) {
+      return false;
+    }
+    if (duration <= Duration.zero) {
+      return !_cancelled;
+    }
+    await Future.any<void>(<Future<void>>[
+      Future<void>.delayed(duration),
+      _completer.future,
+    ]);
+    return !_cancelled;
+  }
 }
 
 class RateLimiterConfig {
@@ -83,10 +98,10 @@ class RateLimiterConfig {
     this.jitterMs = 40.0,
     this.seatRefreshCooldownS = 1.5,
     this.backoffBaseS = 0.2,
-    this.backoffMaxS = 6.0,
-    this.throttleBackoffBaseS = 3.0,
-    this.maxConsecutiveThrottles = 5,
-    this.maxSessionRequests = 160,
+    this.backoffMaxS = 4.0,
+    this.throttleBackoffBaseS = 0.8,
+    this.maxConsecutiveThrottles = 12,
+    this.maxSessionRequests = 200,
   });
 }
 
@@ -139,7 +154,7 @@ class RateLimiter {
     if (waitS > 0) {
       final waitDur = Duration(microseconds: (waitS * 1000000.0).round());
       if (stopToken != null) {
-        final ok = await stopToken.sleepInterruptible(waitDur);
+        final ok = await stopToken.sleepExact(waitDur);
         if (!ok) {
           return false;
         }
@@ -207,7 +222,7 @@ class RateLimiter {
     final delayS = nextBackoff(isRateLimit: isRateLimit);
     final dur = Duration(microseconds: (delayS * 1000000.0).round());
     if (stopToken != null) {
-      return stopToken.sleepInterruptible(dur);
+      return stopToken.sleepExact(dur);
     }
     await Future<void>.delayed(dur);
     return true;

@@ -20,7 +20,7 @@ from core.libseat_client import (
     RoomStats,
     UserProfile,
 )
-from core.protocol import GlobalConfig, TokenExpiredError
+from core.protocol import GlobalConfig, TokenExpiredError, TransientServerBusyError
 from core.rate_limiter import RateLimiter, RateLimiterConfig
 from logic.booker import ApiSeatBooker
 from logic.orchestrator import run_api_session
@@ -51,6 +51,7 @@ class _FakeLibSeatClient:
         stats_by_building: dict[str, list[RoomStats]] | None = None,
         book_results: list[BookResponse | Exception] | None = None,
         check_results: list[ClickCaptchaCheckResult] | None = None,
+        fetch_captcha_results: list[ClickCaptchaChallenge | Exception] | None = None,
         word_check_count: int = 3,
         now_utc: datetime | None = None,
     ):
@@ -86,9 +87,12 @@ class _FakeLibSeatClient:
         }
         self._book_results = list(book_results or [BookResponse(status="success", seat_no="8", reservation_id="4666692", receipt="7222-692-4")])
         self._check_results = list(check_results or [])
+        self._fetch_captcha_results = list(fetch_captcha_results or [])
         self._word_check_count = word_check_count
 
         self.booked_seat_ids: list[str] = []
+        self.list_room_seats_calls = 0
+        self.fetch_captcha_calls = 0
         self.login_calls = 0
         self.keepalive_calls = 0
         self.closed = False
@@ -125,9 +129,16 @@ class _FakeLibSeatClient:
         return self._rooms.get((campus_name, room_name))
 
     def list_room_seats(self, room_id, date_str, *, stop_event=None):
+        self.list_room_seats_calls += 1
         return list(self._seats_by_room.get(room_id, []))
 
     def fetch_click_captcha(self, *, stop_event=None):
+        self.fetch_captcha_calls += 1
+        if self._fetch_captcha_results:
+            item = self._fetch_captcha_results.pop(0)
+            if isinstance(item, Exception):
+                raise item
+            return item
         return ClickCaptchaChallenge(
             token="c" * 32,
             word_check_count=self._word_check_count,
@@ -194,6 +205,9 @@ def test_booker_grace_retries_on_0630_not_open_yet_then_succeeds():
         account="20240001",
         captcha_service=_FakeCaptchaService(),
         grace_backoff_seconds=0.0,
+        peak_min_solve_seconds=0.0,
+        peak_post_check_seconds=0.0,
+        peak_retry_cooldown_seconds=0.0,
     )
     res = booker.attempt_seat(
         SeatCandidate("8", "17293", "30", "free"),
@@ -218,7 +232,14 @@ def test_booker_rolls_over_to_fallback_room_when_primary_seats_taken():
             BookResponse(status="success", reservation_id="9001", receipt="R-9001"),
         ],
     )
-    booker = ApiSeatBooker(client, account="20240001", captcha_service=_FakeCaptchaService())
+    booker = ApiSeatBooker(
+        client,
+        account="20240001",
+        captcha_service=_FakeCaptchaService(),
+        peak_min_solve_seconds=0.0,
+        peak_post_check_seconds=0.0,
+        peak_retry_cooldown_seconds=0.0,
+    )
     outcome, res, room_name = booker.attack_rooms(
         room_plan=[("崇山校区图书馆", "三楼智慧研修空间"), ("崇山校区图书馆", "四楼南自习室")],
         prefer_seats=["8"],
@@ -258,7 +279,14 @@ def test_booker_stops_immediately_on_blacklist_and_existing_reservation():
     c_bl = _FakeLibSeatClient(
         book_results=[BookResponse(status="blacklist", message="对不起，您已被加入黑名单")],
     )
-    b2 = ApiSeatBooker(c_bl, account="20240001", captcha_service=_FakeCaptchaService())
+    b2 = ApiSeatBooker(
+        c_bl,
+        account="20240001",
+        captcha_service=_FakeCaptchaService(),
+        peak_min_solve_seconds=0.0,
+        peak_post_check_seconds=0.0,
+        peak_retry_cooldown_seconds=0.0,
+    )
     outcome2, res2, _ = b2.attack_rooms(
         room_plan=[("崇山校区图书馆", "三楼智慧研修空间")],
         prefer_seats=["8", "10"],
@@ -271,6 +299,62 @@ def test_booker_stops_immediately_on_blacklist_and_existing_reservation():
     )
     assert outcome2 == "stopped" and res2 is not None and res2.status == "blacklist"
     assert c_bl.booked_seat_ids == ["17293"]
+
+
+def test_booker_recovers_from_0630_captcha_system_busy_and_skips_redundant_layout():
+    """复现 06:30 高峰「系统繁忙, 请稍后: 05/06」与无首选座冗余刷新修复。"""
+    fire_utc = datetime(2026, 11, 21, 22, 30, 0, tzinfo=timezone.utc)  # BJ 06:30:00
+    fire_bj = fire_utc.astimezone(BJ_TZ)
+    ok_ch = ClickCaptchaChallenge(token="c" * 32, word_check_count=3, target_bytes=b"t", bg_bytes=b"b")
+
+    client = _FakeLibSeatClient(
+        now_utc=fire_utc,
+        fetch_captcha_results=[
+            ok_ch,  # 第1次取码成功，但校验失败
+            TransientServerBusyError("/cap/captcha 暂不可用: 系统繁忙, 请稍后: 05", is_rate_limit=True),
+            TransientServerBusyError("/cap/captcha 暂不可用: 系统繁忙, 请稍后: 06", is_rate_limit=True),
+            ok_ch,  # 第2次成功取码 -> check OK -> freeBook 报验证码错误
+            ok_ch,  # 第3次成功取码 -> 最终抢座成功
+        ],
+        check_results=[
+            ClickCaptchaCheckResult(ok=False, message="验证失败"),
+            ClickCaptchaCheckResult(ok=True),
+            ClickCaptchaCheckResult(ok=True),
+        ],
+        book_results=[
+            BookResponse(status="retry_captcha", message="验证码错误"),
+            BookResponse(status="success", reservation_id="7788", receipt="R-7788"),
+        ],
+    )
+    booker = ApiSeatBooker(
+        client,
+        account="20240001",
+        captcha_service=_FakeCaptchaService(),
+        peak_min_solve_seconds=0.0,
+        peak_post_check_seconds=0.0,
+        peak_retry_cooldown_seconds=0.0,
+    )
+    schedule = {
+        "run_date": fire_bj.date(),
+        "prep_at": fire_bj - timedelta(seconds=15),
+        "keepalive_at": fire_bj - timedelta(seconds=5),
+        "fire_at": fire_bj,
+    }
+    outcome, res, _ = booker.attack_rooms(
+        room_plan=[("崇山校区图书馆", "三楼智慧研修空间")],
+        prefer_seats=[],
+        start_time="08:00",
+        end_time="14:00",
+        schedule=schedule,
+        stop_event=threading.Event(),
+        coordinator=SeatClaimCoordinator(),
+        wait_until_fn=_instant_wait,
+    )
+    assert outcome == "success"
+    assert res is not None and res.reservation_id == "7788"
+    assert client.fetch_captcha_calls == 5
+    # 未配首选座时，06:30:00 不应重复拉取 room_layout（仅预热阶段 1 次）
+    assert client.list_room_seats_calls == 1
 
 
 # ───────────────── Orchestrator 会话编排测试 ─────────────────

@@ -66,6 +66,12 @@
 		<string>audio</string>
 	</array>
 
+	<!-- 允许通过系统「文件」App（我的 iPhone → LNU-LibSeat）直接查看与导出全部脱敏日志 -->
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
+
 	<!-- 放行辽宁大学图书馆 http://libseat.lnu.edu.cn 明文 HTTP 请求 -->
 	<key>NSAppTransportSecurity</key>
 	<dict>

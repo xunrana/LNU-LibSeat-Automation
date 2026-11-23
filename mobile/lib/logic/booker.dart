@@ -18,11 +18,16 @@ const int maxBusyRetriesPerSeat = 12;
 const double openGraceWindowSeconds = 5.0;
 const int maxOpenGraceRetries = 5;
 const Duration openGraceBackoffDuration = Duration(milliseconds: 250);
-const Duration peakClick3MinSolveDuration = Duration(milliseconds: 850);
-const Duration peakClick3PostCheckDuration = Duration(milliseconds: 250);
+// 对齐官网 Vue 前端 chunk0.js 硬编码延时：
+// 1) loadCaptchaImg -> setTimeout(showConfirm=true, 1500)
+// 2) orderSeatFun   -> setTimeout(freeBook, 2000)
+// 3) /cap/captcha   -> 服务端 6 秒滑动窗口频控（系统繁忙, 请稍后: 06）
+const Duration peakClick3MinSolveDuration = Duration(milliseconds: 1550);
+const Duration peakClick3PostCheckDuration = Duration(milliseconds: 2050);
 const Duration peakPostCheckStepDuration = Duration(milliseconds: 400);
-const Duration peakPostCheckMaxDuration = Duration(milliseconds: 1500);
-const Duration peakClick3RetryCooldownDuration = Duration(milliseconds: 600);
+const Duration peakPostCheckMaxDuration = Duration(milliseconds: 2800);
+const Duration peakClick3RetryCooldownDuration = Duration(milliseconds: 6200);
+const double serverCooldownPadSeconds = 0.60;
 
 typedef LogCallback = void Function(String account, String message);
 typedef CaptchaDiagnosticCallback = void Function(
@@ -82,6 +87,8 @@ class ApiSeatBooker {
   final Duration peakRetryCooldownDuration;
   final LogCallback? onLog;
   final CaptchaDiagnosticCallback? onCaptchaDiagnostic;
+  final Stopwatch _sessionClock = Stopwatch()..start();
+  int? _lastPeakCaptchaFetchElapsedMs;
 
   ApiSeatBooker({
     required this.client,
@@ -137,19 +144,28 @@ class ApiSeatBooker {
     return deltaS >= -1.0 && deltaS <= openGraceWindowSeconds;
   }
 
-  /// 处理服务端瞬态繁忙退避；返回 `(shouldContinue, stopReason)`。
+  /// 处理服务端瞬态繁忙退避；若服务端提示「请稍后: 06」，足额等待 6.6s 以免重置 Redis 滑动窗口。
   Future<(bool, String)> _waitTransientBusy(
     String stageDesc,
     String message,
     int busyRetries,
     CancelTokenSource stopToken, {
     bool isRateLimit = true,
+    double? retryAfterSeconds,
   }) async {
-    _log('⏳ $stageDesc遇服务端繁忙 ($busyRetries/$maxBusyRetries): $message，退避重试...');
+    final parsedCd = retryAfterSeconds ?? parseRetryAfterSeconds(message);
+    final minDelayS =
+        (parsedCd != null && peakRetryCooldownDuration > Duration.zero)
+            ? (parsedCd + serverCooldownPadSeconds)
+            : 0.0;
+    final hint =
+        minDelayS > 0 ? '（冷却 ${minDelayS.toStringAsFixed(1)}s）' : '';
+    _log('⏳ $stageDesc遇服务端繁忙 ($busyRetries/$maxBusyRetries): $message，退避重试$hint...');
     try {
       final ok = await client.rateLimiter.waitBackoff(
         stopToken: stopToken,
         isRateLimit: isRateLimit,
+        minDelaySeconds: minDelayS,
       );
       if (!ok) {
         return (false, '收到停止信号');
@@ -188,6 +204,26 @@ class ApiSeatBooker {
       final displayAttempt = captchaAttempt + 1;
       _log('🔁 座位 ${seat.seatNo} 第 $displayAttempt/$maxCaptchaRetries 次纯 API 验证码与提交尝试...');
 
+      // 若上一轮已是 06:30 高峰三字码，跨次/跨座再次取码前确保距上次取码满 6.2s，防止触发「系统繁忙, 请稍后: 06」滑动锁
+      if (_lastPeakCaptchaFetchElapsedMs != null &&
+          peakRetryCooldownDuration > Duration.zero) {
+        final sinceLastMs =
+            _sessionClock.elapsedMilliseconds - _lastPeakCaptchaFetchElapsedMs!;
+        final remainMs = peakRetryCooldownDuration.inMilliseconds - sinceLastMs;
+        if (remainMs > 0) {
+          _log(
+            '⏳ 等待高峰取码 6s 冷却窗口结束 (剩余 ${(remainMs / 1000.0).toStringAsFixed(2)}s)...',
+          );
+          if (!await stopToken.sleepExact(Duration(milliseconds: remainMs))) {
+            return BookResponse(
+              status: ApiOutcomeStatus.stop,
+              message: '收到停止信号',
+              seatNo: seat.seatNo,
+            );
+          }
+        }
+      }
+
       ClickCaptchaChallenge challenge;
       try {
         challenge = await client.fetchClickCaptcha(stopToken: stopToken);
@@ -214,6 +250,9 @@ class ApiSeatBooker {
       } on TokenExpiredException {
         rethrow;
       } on TransientServerBusyException catch (exc) {
+        if (_lastPeakCaptchaFetchElapsedMs != null) {
+          _lastPeakCaptchaFetchElapsedMs = _sessionClock.elapsedMilliseconds;
+        }
         busyRetries += 1;
         if (busyRetries > maxBusyRetries) {
           _log('💔 座位 ${seat.seatNo} 拉取验证码连续繁忙达 $maxBusyRetries 次，切换下一座位');
@@ -229,6 +268,7 @@ class ApiSeatBooker {
           busyRetries,
           stopToken,
           isRateLimit: exc.isRateLimit,
+          retryAfterSeconds: exc.effectiveRetryAfterSeconds,
         );
         if (!cont) {
           return BookResponse(
@@ -252,6 +292,9 @@ class ApiSeatBooker {
 
       final fetchSw = Stopwatch()..start();
       final isPeakClick3 = challenge.wordCheckCount >= 3;
+      if (isPeakClick3) {
+        _lastPeakCaptchaFetchElapsedMs = _sessionClock.elapsedMilliseconds;
+      }
       captchaAttempt += 1;
 
       final outcome = await captchaService.solve(
@@ -425,19 +468,14 @@ class ApiSeatBooker {
             seatNo: seat.seatNo,
           );
         }
-        if (isPeakClick3 && peakRetryCooldownDuration > Duration.zero) {
-          if (!await stopToken.sleepExact(peakRetryCooldownDuration)) {
-            return BookResponse(
-              status: ApiOutcomeStatus.stop,
-              message: '收到停止信号',
-              seatNo: seat.seatNo,
-            );
-          }
-        }
         continue;
       }
 
       if (isPeakClick3 && adaptivePostCheck > Duration.zero) {
+        _log(
+          '✅ 验证码校验通过，遵循官网高峰防风控窗口等待 '
+          '${(adaptivePostCheck.inMilliseconds / 1000.0).toStringAsFixed(2)}s 后提交 freeBook (座位 ${seat.seatNo})...',
+        );
         if (!await stopToken.sleepExact(adaptivePostCheck)) {
           return BookResponse(
             status: ApiOutcomeStatus.stop,
@@ -445,9 +483,9 @@ class ApiSeatBooker {
             seatNo: seat.seatNo,
           );
         }
+      } else {
+        _log('✅ 验证码一次通过，立即提交 freeBook (座位 ${seat.seatNo})...');
       }
-
-      _log('✅ 验证码一次通过，立即提交 freeBook (座位 ${seat.seatNo})...');
 
       final inGrace = _inOpenGraceWindow(fireAt);
       BookResponse bookRes;
@@ -625,15 +663,6 @@ class ApiSeatBooker {
             message: exc.message,
             seatNo: seat.seatNo,
           );
-        }
-        if (isPeakClick3 && peakRetryCooldownDuration > Duration.zero) {
-          if (!await stopToken.sleepExact(peakRetryCooldownDuration)) {
-            return BookResponse(
-              status: ApiOutcomeStatus.stop,
-              message: '收到停止信号',
-              seatNo: seat.seatNo,
-            );
-          }
         }
         continue;
       }

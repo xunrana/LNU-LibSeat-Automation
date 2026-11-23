@@ -30,6 +30,7 @@ from core.protocol import (
     TokenExpiredError,
     TransientServerBusyError,
     is_transient_busy_text,
+    parse_retry_after_seconds,
 )
 from core.rate_limiter import RateLimitCircuitOpenError
 from core.session_recorder import SessionRecorder
@@ -46,11 +47,16 @@ MAX_BUSY_RETRIES_PER_SEAT = 12
 OPEN_GRACE_WINDOW_SECONDS = 5.0
 MAX_OPEN_GRACE_RETRIES = 5
 OPEN_GRACE_BACKOFF_SECONDS = 0.25
-PEAK_CLICK3_MIN_SOLVE_SECONDS = 0.85
-PEAK_CLICK3_POST_CHECK_SECONDS = 0.25
+# 对齐官网 Vue 前端 chunk0.js 硬编码延时：
+# 1) loadCaptchaImg -> setTimeout(showConfirm=true, 1500)
+# 2) orderSeatFun   -> setTimeout(freeBook, 2000)
+# 3) /cap/captcha   -> 服务端 6 秒滑动窗口频控（系统繁忙, 请稍后: 06）
+PEAK_CLICK3_MIN_SOLVE_SECONDS = 1.55
+PEAK_CLICK3_POST_CHECK_SECONDS = 2.05
 PEAK_POST_CHECK_STEP_SECONDS = 0.40
-PEAK_POST_CHECK_MAX_SECONDS = 1.50
-PEAK_CLICK3_RETRY_COOLDOWN_SECONDS = 0.60
+PEAK_POST_CHECK_MAX_SECONDS = 2.80
+PEAK_CLICK3_RETRY_COOLDOWN_SECONDS = 6.20
+SERVER_COOLDOWN_PAD_SECONDS = 0.60
 
 
 class _AccountLoggerAdapter(logging.LoggerAdapter):
@@ -94,6 +100,7 @@ class ApiSeatBooker:
         self.peak_min_solve_seconds = max(0.0, float(peak_min_solve_seconds))
         self.peak_post_check_seconds = max(0.0, float(peak_post_check_seconds))
         self.peak_retry_cooldown_seconds = max(0.0, float(peak_retry_cooldown_seconds))
+        self._last_peak_captcha_fetch_at: float | None = None
         self.log = _AccountLoggerAdapter(_logger, {"account": self.account})
 
     def _in_open_grace_window(self, fire_at: datetime | None) -> bool:
@@ -116,19 +123,25 @@ class ApiSeatBooker:
         stop_event: threading.Event,
         *,
         is_rate_limit: bool = True,
+        retry_after_seconds: float | None = None,
     ) -> tuple[bool, str]:
-        """处理服务端瞬态繁忙退避；返回 (should_continue, stop_reason)。"""
+        """处理服务端瞬态繁忙退避；若服务端提示「请稍后: 06」，足额等待 6.6s 以免重置 Redis 滑动窗口。"""
+        parsed_cd = retry_after_seconds if retry_after_seconds is not None else parse_retry_after_seconds(message)
+        min_delay = (parsed_cd + SERVER_COOLDOWN_PAD_SECONDS) if (parsed_cd and self.peak_retry_cooldown_seconds > 0) else 0.0
+        hint = f"（冷却 {min_delay:.1f}s）" if min_delay > 0 else ""
         self.log.warning(
-            "⏳ %s遇服务端繁忙 (%d/%d): %s，退避重试...",
+            "⏳ %s遇服务端繁忙 (%d/%d): %s，退避重试%s...",
             stage_desc,
             busy_retries,
             self.max_busy_retries,
             message,
+            hint,
         )
         try:
             ok = self.client.rate_limiter.wait_backoff(
                 stop_event=stop_event,
                 is_rate_limit=is_rate_limit,
+                min_delay_s=min_delay,
             )
         except RateLimitCircuitOpenError as exc:
             self.log.error("🛑 %s", exc)
@@ -166,6 +179,15 @@ class ApiSeatBooker:
                 self.max_captcha_retries,
             )
 
+            # 若上一轮已是 06:30 高峰三字码，跨次/跨座再次取码前确保距上次取码满 6.2s，防止触发「系统繁忙, 请稍后: 06」滑动锁
+            if self._last_peak_captcha_fetch_at is not None and self.peak_retry_cooldown_seconds > 0:
+                since_last_fetch = time.monotonic() - self._last_peak_captcha_fetch_at
+                cd_remain = self.peak_retry_cooldown_seconds - since_last_fetch
+                if cd_remain > 0:
+                    self.log.info("⏳ 等待高峰取码 6s 冷却窗口结束 (剩余 %.2fs)...", cd_remain)
+                    if not self._sleep_interruptible(cd_remain, stop_event):
+                        return BookResponse(status="stop", message="收到停止信号", seat_no=seat.seat_no)
+
             try:
                 challenge = self.client.fetch_click_captcha(stop_event=stop_event)
             except InterruptedError:
@@ -176,6 +198,8 @@ class ApiSeatBooker:
             except TokenExpiredError:
                 raise
             except TransientServerBusyError as exc:
+                if self._last_peak_captcha_fetch_at is not None:
+                    self._last_peak_captcha_fetch_at = time.monotonic()
                 busy_retries += 1
                 if busy_retries > self.max_busy_retries:
                     self.log.warning(
@@ -190,6 +214,7 @@ class ApiSeatBooker:
                     busy_retries,
                     stop_event,
                     is_rate_limit=exc.is_rate_limit,
+                    retry_after_seconds=exc.retry_after_seconds,
                 )
                 if not cont:
                     return BookResponse(status="stop", message=stop_msg, seat_no=seat.seat_no)
@@ -202,6 +227,8 @@ class ApiSeatBooker:
 
             fetch_done_at = time.monotonic()
             is_peak_click3 = challenge.word_check_count >= 3
+            if is_peak_click3:
+                self._last_peak_captcha_fetch_at = fetch_done_at
             captcha_attempt += 1
 
             outcome = self.captcha_service.solve(
@@ -299,16 +326,18 @@ class ApiSeatBooker:
                 self.log.warning("⚠️ 验证码校验未通过 (%s)，刷新重试", check_res.message)
                 if not self.client.rate_limiter.wait_backoff(stop_event=stop_event):
                     return BookResponse(status="stop", message="收到停止信号", seat_no=seat.seat_no)
-                if is_peak_click3 and self.peak_retry_cooldown_seconds > 0:
-                    if not self._sleep_interruptible(self.peak_retry_cooldown_seconds, stop_event):
-                        return BookResponse(status="stop", message="收到停止信号", seat_no=seat.seat_no)
                 continue
 
             if is_peak_click3 and adaptive_post_check_s > 0:
+                self.log.info(
+                    "✅ 验证码校验通过，遵循官网高峰防风控窗口等待 %.2fs 后提交 freeBook (座位 %s)...",
+                    adaptive_post_check_s,
+                    seat.seat_no,
+                )
                 if not self._sleep_interruptible(adaptive_post_check_s, stop_event):
                     return BookResponse(status="stop", message="收到停止信号", seat_no=seat.seat_no)
-
-            self.log.info("✅ 验证码一次通过，立即提交 freeBook (座位 %s)...", seat.seat_no)
+            else:
+                self.log.info("✅ 验证码一次通过，立即提交 freeBook (座位 %s)...", seat.seat_no)
 
             in_grace = self._in_open_grace_window(fire_at)
             try:
@@ -411,9 +440,6 @@ class ApiSeatBooker:
                 except RateLimitCircuitOpenError as exc:
                     self.log.error("🛑 %s", exc)
                     return BookResponse(status="stop", message=str(exc), seat_no=seat.seat_no)
-                if is_peak_click3 and self.peak_retry_cooldown_seconds > 0:
-                    if not self._sleep_interruptible(self.peak_retry_cooldown_seconds, stop_event):
-                        return BookResponse(status="stop", message="收到停止信号", seat_no=seat.seat_no)
                 continue
 
             # seat_taken / failed：立即结束当前座位尝试，由外层换下一空座

@@ -85,6 +85,8 @@ class ProtocolConstants {
   ];
 }
 
+final RegExp _reRetryAfter = RegExp(r'(?:请稍[后候]|繁忙)[^0-9]{0,8}(\d{1,2})\b');
+
 /// 判断服务端反馈是否属于高峰瞬态繁忙/频控（排除维护提示）。
 bool isTransientBusyText(String? text) {
   final cleaned = (text ?? '').trim();
@@ -96,6 +98,26 @@ bool isTransientBusyText(String? text) {
   }
   final lowered = cleaned.toLowerCase();
   return ProtocolConstants.transientBusyKeywords.any(lowered.contains);
+}
+
+/// 从「系统繁忙, 请稍后: 06」等反馈中提取服务端滑动窗口冷却秒数（如 6.0）。
+double? parseRetryAfterSeconds(String? text) {
+  final cleaned = (text ?? '').trim();
+  if (cleaned.isEmpty) {
+    return null;
+  }
+  if (ProtocolConstants.maintenanceKeywords.any(cleaned.contains)) {
+    return null;
+  }
+  final m = _reRetryAfter.firstMatch(cleaned);
+  if (m == null) {
+    return null;
+  }
+  final val = int.tryParse(m.group(1)!);
+  if (val == null || val < 1 || val > 60) {
+    return null;
+  }
+  return val.toDouble();
 }
 
 /// 服务端响应结构/鉴权协议与已知契约不匹配时抛出，触发立即熔断停止。
@@ -111,10 +133,16 @@ class ProtocolDriftException implements Exception {
 class TransientServerBusyException implements Exception {
   final String message;
   final bool isRateLimit;
+  final double? retryAfterSeconds;
+
   const TransientServerBusyException(
     this.message, {
     this.isRateLimit = true,
+    this.retryAfterSeconds,
   });
+
+  double? get effectiveRetryAfterSeconds =>
+      retryAfterSeconds ?? parseRetryAfterSeconds(message);
 
   @override
   String toString() => 'TransientServerBusyException: $message';

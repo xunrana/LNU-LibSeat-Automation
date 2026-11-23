@@ -19,6 +19,7 @@ from core.protocol import (
     TokenExpiredError,
     TransientServerBusyError,
     is_transient_busy_text,
+    parse_retry_after_seconds,
 )
 from core.rate_limiter import RateLimitCircuitOpenError, RateLimiter, RateLimiterConfig
 from core.session_recorder import SessionRecorder
@@ -264,6 +265,12 @@ def test_transient_server_busy_on_captcha_and_5xx_does_not_trip_protocol_drift()
     # 维护提示含“请稍后”但必须优先归类为维护而非瞬态繁忙
     assert is_transient_busy_text("系统维护中，请稍后再试") is False
 
+    # 解析「系统繁忙, 请稍后: 06」中的滑动窗口剩余冷却秒数
+    assert parse_retry_after_seconds("系统繁忙, 请稍后: 06") == 6.0
+    assert parse_retry_after_seconds("/cap/captcha 暂不可用: 系统繁忙, 请稍后: 05") == 5.0
+    assert parse_retry_after_seconds("系统繁忙，请稍后再试") is None
+    assert parse_retry_after_seconds("系统维护中，请稍后: 06") is None
+
     # 1) 06:30 高峰 /cap/captcha 返回「系统繁忙, 请稍后: 05」应抛 TransientServerBusyError 而非 ProtocolDriftError
     c_cap, _ = _make_client([
         _FakeResponse(200, {"status": "FAIL", "message": "系统繁忙, 请稍后: 05"}),
@@ -273,6 +280,7 @@ def test_transient_server_busy_on_captcha_and_5xx_does_not_trip_protocol_drift()
     with pytest.raises(TransientServerBusyError) as exc_info:
         c_cap.fetch_click_captcha()
     assert exc_info.value.is_rate_limit is True
+    assert exc_info.value.retry_after_seconds == 5.0
     assert "05" in str(exc_info.value)
 
     # 2) 高峰网关 502/503 HTML 不应误判为协议漂移

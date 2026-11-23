@@ -98,7 +98,7 @@ class RateLimiterConfig {
     this.jitterMs = 40.0,
     this.seatRefreshCooldownS = 1.5,
     this.backoffBaseS = 0.2,
-    this.backoffMaxS = 4.0,
+    this.backoffMaxS = 6.8,
     this.throttleBackoffBaseS = 0.8,
     this.maxConsecutiveThrottles = 12,
     this.maxSessionRequests = 200,
@@ -214,12 +214,13 @@ class RateLimiter {
     return min(capped + jitter, config.backoffMaxS);
   }
 
-  /// 计算退避并执行可中断休眠；被取消返回 false。
+  /// 计算退避并执行可中断休眠；若服务端明确返回冷却秒数（如 `: 06`），按 `max(backoff, minDelaySeconds)` 等待。
   Future<bool> waitBackoff({
     CancelTokenSource? stopToken,
     bool isRateLimit = false,
+    double minDelaySeconds = 0.0,
   }) async {
-    final delayS = nextBackoff(isRateLimit: isRateLimit);
+    final delayS = max(nextBackoff(isRateLimit: isRateLimit), minDelaySeconds);
     final dur = Duration(microseconds: (delayS * 1000000.0).round());
     if (stopToken != null) {
       return stopToken.sleepExact(dur);

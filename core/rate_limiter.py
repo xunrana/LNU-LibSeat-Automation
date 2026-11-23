@@ -22,7 +22,7 @@ class RateLimiterConfig:
     jitter_ms: float = 40.0
     seat_refresh_cooldown_s: float = 1.5
     backoff_base_s: float = 0.2
-    backoff_max_s: float = 4.0
+    backoff_max_s: float = 6.8
     throttle_backoff_base_s: float = 0.8
     max_consecutive_throttles: int = 12
     max_session_requests: int = 200
@@ -151,7 +151,8 @@ class RateLimiter:
         stop_event: threading.Event | None = None,
         *,
         is_rate_limit: bool = False,
+        min_delay_s: float = 0.0,
     ) -> bool:
-        """计算退避并执行可中断休眠；被 stop_event 中断返回 False。"""
-        delay = self.next_backoff(is_rate_limit=is_rate_limit)
+        """计算退避并执行可中断休眠；若服务端明确返回冷却秒数（如 06s），按 max(backoff, min_delay_s) 等待。"""
+        delay = max(self.next_backoff(is_rate_limit=is_rate_limit), float(min_delay_s))
         return _interruptible_sleep(delay, stop_event, self._sleep)

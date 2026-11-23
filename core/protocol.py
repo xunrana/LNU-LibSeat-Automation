@@ -78,6 +78,7 @@ TRANSIENT_BUSY_KEYWORDS = (
 _RE_BASEURL = re.compile(r'BASEURL\s*:\s*["\']([^"\']+)["\']')
 _RE_CODE = re.compile(r"CODE\s*:\s*(true|false)", re.I)
 _RE_NUMCODE = re.compile(r'NUMCODE\s*:\s*["\']([^"\']+)["\']')
+_RE_RETRY_AFTER = re.compile(r"(?:请稍[后候]|繁忙)[^0-9]{0,8}(\d{1,2})\b")
 
 
 def is_transient_busy_text(text: str | None) -> bool:
@@ -91,6 +92,20 @@ def is_transient_busy_text(text: str | None) -> bool:
     return any(kw in lowered for kw in TRANSIENT_BUSY_KEYWORDS)
 
 
+def parse_retry_after_seconds(text: str | None) -> float | None:
+    """从「系统繁忙, 请稍后: 06」等反馈中提取服务端滑动窗口冷却秒数（如 6.0）。"""
+    cleaned = (text or "").strip()
+    if not cleaned:
+        return None
+    if any(kw in cleaned for kw in MAINTENANCE_KEYWORDS):
+        return None
+    m = _RE_RETRY_AFTER.search(cleaned)
+    if not m:
+        return None
+    val = int(m.group(1))
+    return float(val) if 1 <= val <= 60 else None
+
+
 class ProtocolDriftError(RuntimeError):
     """服务端响应结构/鉴权协议与已知契约不匹配时抛出，触发立即熔断停止。"""
 
@@ -98,9 +113,18 @@ class ProtocolDriftError(RuntimeError):
 class TransientServerBusyError(RuntimeError):
     """服务端瞬态繁忙/网关 5xx/验证码池拥堵等可恢复异常，应退避重试而非熔断停机。"""
 
-    def __init__(self, message: str, *, is_rate_limit: bool = True) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        is_rate_limit: bool = True,
+        retry_after_seconds: float | None = None,
+    ) -> None:
         super().__init__(message)
         self.is_rate_limit = is_rate_limit
+        self.retry_after_seconds = (
+            retry_after_seconds if retry_after_seconds is not None else parse_retry_after_seconds(message)
+        )
 
 
 class TokenExpiredError(RuntimeError):

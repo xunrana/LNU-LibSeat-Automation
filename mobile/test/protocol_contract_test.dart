@@ -643,6 +643,27 @@ void main() {
     expect(isTransientBusyText('系统繁忙, 请稍后: 05'), isTrue);
     expect(isTransientBusyText('系统繁忙, 请稍后: 06'), isTrue);
     expect(isTransientBusyText('系统维护中，请稍后再试'), isFalse);
+    expect(parseRetryAfterSeconds('系统繁忙, 请稍后: 06'), equals(6.0));
+    expect(parseRetryAfterSeconds('/cap/captcha 暂不可用: 系统繁忙, 请稍后: 05'), equals(5.0));
+    expect(parseRetryAfterSeconds('系统繁忙，请稍后再试'), isNull);
+    expect(parseRetryAfterSeconds('系统维护中，请稍后: 06'), isNull);
+    expect(
+      const TransientServerBusyException('/cap/captcha 暂不可用: 系统繁忙, 请稍后: 06')
+          .effectiveRetryAfterSeconds,
+      equals(6.0),
+    );
+    expect(
+      peakClick3MinSolveDuration,
+      equals(const Duration(milliseconds: 1550)),
+    );
+    expect(
+      peakClick3PostCheckDuration,
+      equals(const Duration(milliseconds: 2050)),
+    );
+    expect(
+      peakClick3RetryCooldownDuration,
+      equals(const Duration(milliseconds: 6200)),
+    );
 
     final okChallenge = ClickCaptchaChallenge(
       token: 'c' * 32,

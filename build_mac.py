@@ -23,6 +23,7 @@ LNU-LibSeat-Automation macOS 构建脚本（精简瘦身版）
 """
 import os
 import platform
+import plistlib
 import shutil
 import subprocess
 import sys
@@ -330,6 +331,66 @@ LNU-LibSeat 图书馆智能抢座系统 v6 · macOS 使用说明
 '''
 
 
+def _patch_plist_and_verify_bundle(app_path: str, expected_arch: str) -> None:
+    """补齐 Info.plist 版本号、校验 .app 内所有 Mach-O 均为纯原生架构并重做 ad-hoc 签名。"""
+    plist_path = os.path.join(app_path, "Contents", "Info.plist")
+    clean_ver = APP_VERSION.lstrip("v") or "6.0.0"
+    if os.path.isfile(plist_path):
+        with open(plist_path, "rb") as f:
+            info = plistlib.load(f)
+        info["CFBundleShortVersionString"] = clean_ver
+        info["CFBundleVersion"] = clean_ver
+        if expected_arch == "arm64":
+            info["LSArchitecturePriority"] = ["arm64"]
+        with open(plist_path, "wb") as f:
+            plistlib.dump(info, f)
+        print(f"[OK] Info.plist 已写入版本 {clean_ver}（优先原生 {expected_arch}）")
+
+    # 校验 bundle 内所有 Mach-O 二进制架构（杜绝 x86_64 残留触发 macOS Rosetta 提醒）
+    if expected_arch == "arm64":
+        macho_count = 0
+        non_arm64: list[str] = []
+        for root_dir, _dirs, files in os.walk(app_path):
+            for fn in files:
+                fp = os.path.join(root_dir, fn)
+                if os.path.islink(fp):
+                    continue
+                res = subprocess.run(
+                    ["lipo", "-archs", fp],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                    text=True,
+                )
+                if res.returncode != 0:
+                    continue
+                archs = res.stdout.strip()
+                if not archs:
+                    continue
+                macho_count += 1
+                if archs != "arm64":
+                    rel = os.path.relpath(fp, app_path)
+                    non_arm64.append(f"{rel} ({archs})")
+        if non_arm64:
+            sample = "\n  - ".join(non_arm64[:15])
+            sys.exit(
+                f"[ERROR] 检测到 {len(non_arm64)} 个非纯 arm64 二进制，可能触发 macOS Rosetta 转译:\n  - {sample}"
+            )
+        print(f"[OK] 架构校验通过：全部 {macho_count} 个 Mach-O 二进制均为纯原生 arm64（零 Rosetta 依赖）")
+
+    # 修改 Info.plist 后需重签 .app，保证 bundle seal 完整有效
+    subprocess.check_call(
+        ["codesign", "--force", "--deep", "--sign", "-", app_path],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    subprocess.check_call(
+        ["codesign", "--verify", "--deep", "--strict", app_path],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    print("[OK] .app ad-hoc 签名与完整性校验通过")
+
+
 def build():
     if sys.platform != "darwin":
         sys.exit("[ERROR] build_mac.py 只能在 macOS 上运行。Windows 请用 build.py，"
@@ -396,6 +457,8 @@ def build():
                 for arg in ("--exclude-module", mod)
             ],
         ]
+        if ARCH == "arm64":
+            cmd += ["--target-arch", "arm64"]
         if icns:
             cmd += ["--icon", icns]
         cmd.append(os.path.join(ROOT, "gui_qt.py"))  # 入口
@@ -414,7 +477,10 @@ def build():
     if not os.path.isdir(app_src):
         sys.exit(f"[ERROR] 未生成 .app: {app_src}")
 
-    # --- Step 5: 组装发行夹 ---
+    # --- Step 5: 写入 Info.plist 版本号、校验纯原生架构并重签 .app ---
+    _patch_plist_and_verify_bundle(app_src, ARCH)
+
+    # --- Step 6: 组装发行夹 ---
     if os.path.exists(DIST_DIR):
         shutil.rmtree(DIST_DIR)
     os.makedirs(DIST_DIR)

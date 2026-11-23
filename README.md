@@ -119,6 +119,7 @@ v6 彻底去掉了浏览器和 Selenium 驱动，改为直接调用图书馆接�
 1. 去 [Releases](https://github.com/XUNRANA/LNU-LibSeat-Automation/releases/latest) 下载 `LNU-LibSeat-v6.0.0-macOS-arm64.zip` 并解压。
 2. 首次运行需要**右键**点击 `首次运行请先双击我.command` → 打开 → 再点一次打开（软件没做苹果付费公证，首次需手动放行；如果被拦，去 **系统设置 → 隐私与安全性 → 仍要打开**）。之后直接双击 `LNU-LibSeat.app` 就行。
 3. v6 去掉浏览器后，Mac 端和 Windows 体验完全一致，支持双账号并行，挂机期间自动用系统 `caffeinate` 防休眠。`config.py` 和 `logs/` 就在 `.app` 同级目录。
+4. **纯原生 Apple Silicon（`arm64`）**：包内全部二进制均为原生 `arm64`，**不依赖 Rosetta 2**（不受后续 macOS 取消 Rosetta 影响）。如果此前安装的是旧版 `v5.0.0-macOS-x86_64` 并频繁收到系统 Rosetta 提示，直接升级到 v6 即可（旧 `config.py` 复制到新目录可无缝沿用）。
 
 ---
 

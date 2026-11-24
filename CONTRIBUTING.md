@@ -42,13 +42,13 @@ flutter pub get
 CI（[`.github/workflows/ci.yml`](.github/workflows/ci.yml)）在每次 push / PR 上运行 Python 离线测试、全量 `ruff` 与 `mypy`。提交代码前请在本地逐项通过：
 
 ```powershell
-# 1. 桌面端 Python 单元测试与静态检查（92 项纯离线，零浏览器）
+# 1. 桌面端 Python 单元测试与静态检查（94 项纯离线，零浏览器）
 pip install pytest ruff mypy
 pytest tests/ -q
 ruff check .                # 阻塞门槛：全量默认规则集，须 0 告警
 mypy --platform linux .     # 非阻塞：改类型后建议对齐 CI (Linux) 视角检查
 
-# 2. 若改动 mobile/ 或跨端协议/算子，必须同时通过移动端单测（19 项）
+# 2. 若改动 mobile/ 或跨端协议/算子，必须同时通过移动端单测（23 项）
 cd mobile
 flutter test
 flutter analyze

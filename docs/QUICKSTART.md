@@ -12,10 +12,10 @@
 
 | 平台 | 推荐 | 文件名 | 大小 | 适用情况 |
 | :--- | :---: | :--- | :---: | :--- |
-| **Android** | **主推** | `LNU-LibSeat-Android-arm64.apk` | 165.9 MB | 有安卓机、不想开电脑、想随时查空座和收签到提醒 |
-| **Windows** | **主推** | `LNU-LibSeat-v6.0.0-Windows-x86_64.zip` | 204.6 MB | 习惯宿舍电脑挂机，或者期末求稳不想折腾手机保活 |
-| **iPhone / iPad** | 支持 | `LNU-LibSeat-iOS-arm64-unsigned.ipa` | 146.7 MB | 只用苹果手机，可用免费 Apple ID 自签 |
-| **macOS** | 支持 | `LNU-LibSeat-v6.0.0-macOS-arm64.zip` | 193.6 MB | Apple Silicon Mac 电脑挂机 |
+| **Android** | **主推** | `LNU-LibSeat-Android-arm64.apk` | 166.0 MB | 有安卓机、不想开电脑、想随时查空座和收签到提醒 |
+| **Windows** | **主推** | `LNU-LibSeat-v6.0.0-Windows-x86_64.zip` | 204.7 MB | 习惯宿舍电脑挂机，或者期末求稳不想折腾手机保活 |
+| **iPhone / iPad** | 支持 | `LNU-LibSeat-iOS-arm64-unsigned.ipa` | 146.8 MB | 只用苹果手机，可用免费 Apple ID 自签 |
+| **macOS** | 支持 | `LNU-LibSeat-v6.0.0-macOS-arm64.zip` | 193.6 MB | Apple Silicon Mac 电脑挂机（纯原生 `arm64`，零 Rosetta 2） |
 
 ---
 
@@ -24,7 +24,7 @@
 详细分品牌保活图解见 [docs/ANDROID_INSTALL_GUIDE.md](ANDROID_INSTALL_GUIDE.md)，核心就四步：
 
 1. **下载安装**：去 Releases 下 `LNU-LibSeat-Android-arm64.apk` 直接安装。如果通过微信传到手机文件名后面多了 `.1`，把 `.1` 删掉再装；遇国产系统提示“未知来源 / 未备案”点继续安装就行。
-2. **填账号和目标**：打开 App，到 **我的 → 校园卡账号** 填学号密码（初始密码一般为 `000000`）；回 **晨约** 点 **速改** 选校区、自习室和时段，首选座号可以留空。
+2. **填账号和目标**：打开 App，到 **我的 → 校园卡账号** 填学号密码（初始密码一般为 `000000`）；回 **晨约** 点 **速改** 选校区、自习室和时段，点选首选座号时会按先后顺序显示顺位角标与顶部队列条（全部留空也没问题，会自动抢实时空座）。
 3. **一次性给后台权限**（准备睡前设 06:30 必做）：
    - 进 **我的 → 晨约守夜与后台保活**，把 4 项体检开关全部点绿（电池优化白名单、精确闹钟、系统通知、Android 14+ 锁屏全屏唤醒）；
    - 点底部的专属入口跳到系统设置，按手机品牌打开 **允许后台高耗电、自启动、后台弹出界面、锁屏显示**，并在最近任务里把 App 加锁。
@@ -62,7 +62,7 @@
 ## 三、iPhone 与 Mac 用户
 
 - **iPhone / iPad**：去 Releases 下 `LNU-LibSeat-iOS-arm64-unsigned.ipa`，用 Sideloadly、爱思助手、SideStore 或巨魔免费安装。首次打开前需在 iPhone 设置里开启「开发者模式」并信任证书。详细步骤见 [docs/IOS_INSTALL_GUIDE.md](IOS_INSTALL_GUIDE.md)。
-- **macOS (Apple Silicon)**：去 Releases 下 `LNU-LibSeat-v6.0.0-macOS-arm64.zip`，解压后首次**右键**点击 `首次运行请先双击我.command` → 打开 → 再点打开（解除未公证拦截），之后直接双击 `LNU-LibSeat.app` 即可。挂机期间自动通过系统 `caffeinate` 防休眠，双账号直接并行。
+- **macOS (Apple Silicon)**：去 Releases 下 `LNU-LibSeat-v6.0.0-macOS-arm64.zip`（纯原生 `arm64`，不依赖 Rosetta 2），解压后首次**右键**点击 `首次运行请先双击我.command` → 打开 → 再点打开（解除未公证拦截），之后直接双击 `LNU-LibSeat.app` 即可。挂机期间自动通过系统 `caffeinate` 防休眠，双账号直接并行。
 
 ---
 
@@ -85,7 +85,7 @@
 <summary><b>抢失败了怎么排查？</b></summary>
 
 - **电脑端**打开 `logs/sessions/<时间>_<学号>/`，里面有 `session.log`、`抢座顺序.txt`、已脱敏的 `http_trace.jsonl` 和验证码识别叠加图（`*_captcha_*.png`）。
-- **手机端**进 **我的 → 运行记录与识图回放** 可直接看图复盘并导出日志。
+- **手机端**进 **我的 → 运行记录与识图回放** 可直接看图复盘，支持一键导出最近一轮完整日志（含双账号）或打包全部历史日志（`.zip`）；iPhone 也可直接在系统「文件」App →「我的 iPhone」→「LNU-LibSeat」随时查看。
 </details>
 
 <details>

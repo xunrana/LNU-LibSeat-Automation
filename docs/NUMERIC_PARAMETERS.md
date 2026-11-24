@@ -23,16 +23,22 @@
 
 ---
 
-## 二、抢座重试与 06:30 瞬态宽限
+## 二、抢座重试、06:30 高峰反作弊窗口与瞬态宽限
 
 > 源码：`logic/booker.py` / `mobile/lib/logic/booker.dart`
 
 | 参数 | 值 | 源码符号 | 说明 |
 | :--- | :---: | :--- | :--- |
-| 单座最大验证码重试 | `8` 次 | `MAX_CAPTCHA_RETRIES_PER_SEAT` | 单个候选座位的「取码→求解→校验→提交」最大闭环次数 |
-| 放座瞬态宽限窗口 | `5.0` 秒 | `OPEN_GRACE_WINDOW_SECONDS` | 相对 `fire_at` 的 `[-1.0s, +5.0s]` 区间内收到未开放提示视为瞬态 |
-| 瞬态宽限最大重探 | `5` 次 | `MAX_OPEN_GRACE_RETRIES` | 宽限窗内原地重探上限 |
-| 瞬态宽限退避间隔 | `0.25` 秒 | `OPEN_GRACE_BACKOFF_SECONDS` | 每次宽限重探前休眠 250ms |
+| 单座最大验证码重试 | `8` 次 | `MAX_CAPTCHA_RETRIES_PER_SEAT` / `maxCaptchaRetriesPerSeat` | 单个候选座位的「取码→求解→校验→提交」最大闭环次数 |
+| 单座最大繁忙重试 | `12` 次 | `MAX_BUSY_RETRIES_PER_SEAT` / `maxBusyRetriesPerSeat` | 遇高峰系统繁忙/5xx 时的独立重试上限（不消耗正常验证码次数） |
+| 放座瞬态宽限窗口 | `5.0` 秒 | `OPEN_GRACE_WINDOW_SECONDS` / `openGraceWindowSeconds` | 相对 `fire_at` 的 `[-1.0s, +5.0s]` 区间内收到未开放提示视为瞬态 |
+| 瞬态宽限最大重探 | `5` 次 | `MAX_OPEN_GRACE_RETRIES` / `maxOpenGraceRetries` | 宽限窗内原地重探上限 |
+| 瞬态宽限退避间隔 | `0.25` 秒 | `OPEN_GRACE_BACKOFF_SECONDS` / `openGraceBackoffDuration` | 每次宽限重探前休眠 250ms |
+| 高峰三字码最小求解间隔 | `1.55` 秒 | `PEAK_CLICK3_MIN_SOLVE_SECONDS` / `peakClick3MinSolveDuration` | 对齐官网前端 1.5s 确认按钮解锁延时，防 500ms 内提交被后端拒判 |
+| 高峰校验后提交缓冲 | `2.05` 秒 | `PEAK_CLICK3_POST_CHECK_SECONDS` / `peakClick3PostCheckDuration` | 对齐官网前端 2.0s `orderSeatFun` 缓冲后再发 `freeBook` |
+| 高峰缓冲自适应步长 / 上限 | `+0.40s` / `2.80s` | `PEAK_POST_CHECK_STEP_SECONDS` / `PEAK_POST_CHECK_MAX_SECONDS` | 校验通过但 `freeBook` 仍报验证码错误时自动加长缓冲 |
+| 高峰再次取码最小冷却 | `6.20` 秒 | `PEAK_CLICK3_RETRY_COOLDOWN_SECONDS` / `peakClick3RetryCooldownDuration` | 跨次/跨座再次拉取高峰三字码前确保间隔 ≥ 6.2s，防触发 6 秒滑动锁 |
+| 服务端冷却额外余量 | `0.60` 秒 | `SERVER_COOLDOWN_PAD_SECONDS` / `serverCooldownPadSeconds` | 解析「请稍后: 06」等倒计时后追加 0.6s 余量（如 `6.6s`），避免提前撞锁重置窗口 |
 
 ---
 
@@ -54,7 +60,7 @@
 | 极端异常拒收上限 | `3600.0` 秒 | `max_accept_offset_seconds` | 偏差超过 1 小时直接丢弃该样本 |
 | 样本过期刷新时间 | `300.0` 秒 | `stale_after_seconds` | 超过 5 分钟允许用新样本刷新，否则优先保留 RTT 更低样本 |
 
-### 3. 限流、退避与熔断护栏（`core/rate_limiter.py`）
+### 3. 限流、退避与熔断护栏（`core/rate_limiter.py` / `mobile/lib/core/rate_limiter.dart`）
 
 | 参数 | 值 | 源码符号 | 说明 |
 | :--- | :---: | :--- | :--- |
@@ -62,10 +68,10 @@
 | 随机抖动幅度 | `±40.0` ms | `jitter_ms` | 实际间隔落在 `[80ms, 160ms]` |
 | 空座快照刷新冷却 | `1.5` 秒 | `seat_refresh_cooldown_s` | 触发 `seat_taken` 时刷新 `/layoutByDate` 的最小间隔 |
 | 普通重试退避基数 | `0.2` 秒 | `backoff_base_s` | 指数退避起点（`0.2 → 0.4 → 0.8 ...`） |
-| 限流/429 退避基数 | `3.0` 秒 | `throttle_backoff_base_s` | 触发限流或 HTTP 429 时的指数退避起点 |
-| 单次退避上限 | `6.0` 秒 | `backoff_max_s` | 退避封顶（附加小幅随机抖动且不超过上限） |
-| 连续限流熔断阈值 | `5` 次 | `max_consecutive_throttles` | 连续 5 次限流/429 抛 `RateLimitCircuitOpenError` 停机 |
-| 单会话请求预算硬顶 | `160` 次 | `max_session_requests` | 达到硬顶强制熔断，防止异常死循环 |
+| 限流/429 退避基数 | `0.8` 秒 | `throttle_backoff_base_s` | 触发限流或 HTTP 429 时的指数退避起点（支持服务端 `min_delay_s` 下限覆盖） |
+| 单次退避上限 | `6.8` 秒 | `backoff_max_s` | 退避封顶（附加小幅随机抖动且不超过上限） |
+| 连续限流熔断阈值 | `12` 次 | `max_consecutive_throttles` | 连续 12 次限流/429 抛 `RateLimitCircuitOpenError` 停机 |
+| 单会话请求预算硬顶 | `200` 次 | `max_session_requests` | 达到硬顶强制熔断，防止异常死循环 |
 
 ---
 
@@ -96,7 +102,7 @@
 | SMTP SSL 端口 | `465` | `core/notifications.py:161` | 126 / QQ SMTP over SSL |
 | SMTP 连接超时 | `10` 秒 | `core/notifications.py:161` | 邮件发送超时 |
 | Webhook 超时 | `10.0` 秒（桌面）/ `6s+8s`（移动 Dio） | `notifications.py:103` / `notification_service.dart:73` | 手机推送 HTTP 超时 |
-| 日志单文件上限 | `10 MB` | `core/logger.py:106` | `RotatingFileHandler(maxBytes=10*1024*1024)` |
+| 日志单文件上限 | `10 MB`（桌面）/ `2 MB`（移动 `run_log.txt`） | `core/logger.py:106` / `log_exporter.dart:35` | 桌面轮转保留 5 份；移动端超 2MB 自动滚动保留最新 1MB |
 | 日志备份文件数 | `5` 个 | `core/logger.py:106` | 最多保留 5 个历史轮转日志 |
 
 ---

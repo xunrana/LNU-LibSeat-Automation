@@ -12,4 +12,4 @@ GUI 入口是仓库根的 [`gui_qt.py`](../gui_qt.py)（仅启动 `app.py`）。
 | `services/` | `config_io.py`（配置读写 + 校区/自习室数据）、`prevent_sleep.py`（防系统休眠） |
 
 > 详细拆分与信号流见 [`docs/GUI_QT_ARCHITECTURE.md`](../docs/GUI_QT_ARCHITECTURE.md)。
-> 本地无 PySide6 时这些模块无法导入，但不影响 `pytest tests/ -q`（全部 92 项 Python 离线单测不依赖 GUI）。
+> 本地无 PySide6 时这些模块无法导入，但不影响 `pytest tests/ -q`（全部 94 项 Python 离线单测不依赖 GUI）。

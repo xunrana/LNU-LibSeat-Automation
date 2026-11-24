@@ -11,7 +11,7 @@
 
 ## 安装前先知道 3 件事
 
-1. **下载文件**：去 [GitHub Releases](https://github.com/XUNRANA/LNU-LibSeat-Automation/releases/latest) 下载 **`LNU-LibSeat-iOS-arm64-unsigned.ipa`**（约 146.7 MB，内置全部 5 个本地 ONNX 验证码模型）。
+1. **下载文件**：去 [GitHub Releases](https://github.com/XUNRANA/LNU-LibSeat-Automation/releases/latest) 下载 **`LNU-LibSeat-iOS-arm64-unsigned.ipa`**（约 146.8 MB，内置全部 5 个本地 ONNX 验证码模型）。
 2. **为什么需要自签**：苹果限制非 App Store 应用必须带签名证书才能装进手机，普通免费 Apple ID 可以免费签发个人开发证书。
 3. **免费自签的正常限制**：
    - 证书每 **7 天过期一次**，到期前用原工具原位覆盖重签一下就行（**不要先卸载**，账号、配置和方案都不会丢；用 SideStore 可以连 Wi-Fi 无线续签）；
@@ -110,4 +110,12 @@ iOS 默认锁屏约 30 秒就会冻结普通后台 App，所以这里准备了�
 <summary><b>Q3: iPhone 识别验证码准不准？和电脑端一样吗？</b></summary>
 
 基本一致。安装包内置了与电脑端完全相同的 5 个原版无损 ONNX 模型，图像重采样与灰度算法也和 Python Pillow 逐字节对齐，全部在本地离线推理。
+</details>
+
+<details>
+<summary><b>Q4: 抢座失败了怎么在 iPhone 上导出日志排查？</b></summary>
+
+有两种方式：
+- 在 App 里进入 **我的 → 运行记录与识图回放**，可一键导出**最近一轮完整抢座日志（含双账号）**，或**打包导出全部历史日志（`.zip`）**；
+- 也可以直接打开 iPhone 系统自带的 **「文件」App →「我的 iPhone」→「LNU-LibSeat」→「lnu_libseat_logs」** 随时浏览或隔空投送（所有密码、Token 和 Cookie 均已自动脱敏）。
 </details>

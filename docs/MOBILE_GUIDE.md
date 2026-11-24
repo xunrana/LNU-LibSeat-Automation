@@ -18,7 +18,7 @@ mobile/
 │   │   ├── api_crypto.dart           #   AES-128-CBC 加密 + HMAC-SHA256 全局签名
 │   │   ├── libseat_client.dart       #   Dio HTTP 连接池客户端
 │   │   ├── clock_sync.dart           #   HTTP Date + RTT/2 服务端时钟校准
-│   │   ├── rate_limiter.dart         #   120ms±40ms 间隔 / 1.5s 冷却 / 429 熔断 / 160 次上限
+│   │   ├── rate_limiter.dart         #   120ms±40ms 间隔 / 1.5s 冷却 / 0.8s–6.8s 退避 / 12 次熔断 / 200 次上限
 │   │   ├── session_recorder.dart     #   脱敏 http_trace.jsonl + 识图诊断
 │   │   └── captcha/                  #   独立 Isolate ONNX 推理（5 个无损模型）
 │   │       ├── captcha_service.dart  #     三级自适应路由（wordCheckCount → 槽位笔迹 → 时间窗）
@@ -29,20 +29,21 @@ mobile/
 │   │       └── pil_image_ops.dart    #     Python Pillow 22-bit 定点重采样 + 灰度
 │   ├── logic/                        # 与 Python logic/ 对齐
 │   │   ├── orchestrator.dart         #   15s 预热 / 5s 保活 / +200ms 开抢 / Token 自动重登
-│   │   ├── booker.dart               #   首选直击 / 实时空座 / FALLBACK_ROOMS / 5s 宽限
+│   │   ├── booker.dart               #   首选直击 / 实时空座 / FALLBACK_ROOMS / 高峰 1.55s+2.05s 反作弊对齐 & 6.2s 冷却 / 12 次繁忙重试 / 5s 宽限
 │   │   ├── seat_strategy.dart        #   实时空座排序与双号防撞座
 │   │   └── result_classifier.dart    #   预约结果分类（与 Python result_classifier.py 一致）
 │   ├── services/                     # 平台服务
 │   │   ├── background_scheduler.dart #   MethodChannel 桥接原生保活与权限查询
 │   │   ├── config_store.dart         #   Android Keystore / iOS Keychain 加密存储
+│   │   ├── log_exporter.dart         #   run_log.txt 滚动落盘、最近一轮双号日志与全量脱敏 ZIP 导出
 │   │   ├── notification_service.dart #   本地通知 + 内置 SMTP + Webhook + 系统签到闹钟
 │   │   └── rush_controller.dart      #   界面状态机、日志流与冷启动续抢
-│   └── ui/                           # 统一四频道界面、主题与夜守时钟
+│   └── ui/                           # 统一四频道界面（含偏好选座顺位角标与队列条）、主题与夜守时钟
 ├── android/app/src/main/kotlin/com/xunrana/lnulibseat/MainActivity.kt
 │   └── RushAlarmStore / RushForegroundService / RushAlarmReceiver / RushBootReceiver / CheckinReminderReceiver / BitmapFactory 解码
 ├── ios/Runner/AppDelegate.swift
 │   └── AVAudioPlayer 静音保活 / ImageIO+CoreGraphics 解码 / UNUserNotificationCenter / lnulibseat:// 深链
-└── test/                             # 20 项跨语言契约、Pillow SHA-256 与界面单测
+└── test/                             # 23 项跨语言契约、Pillow SHA-256 与界面单测
 ```
 
 ---
@@ -90,7 +91,7 @@ mobile/
 ```bash
 python build_android.py
 ```
-会自动导出 5 个无损 ONNX 模型、打包 21 间自习室 `room_catalog.json`、生成黄金测试向量、跑通 `flutter test`（20 项全绿），并输出 `dist/辽宁大学图书馆座位预约.apk`（Releases 中命名为 `LNU-LibSeat-Android-arm64.apk`）。若只想准备资源不编 APK，运行 `python build_android.py --prepare-only`。
+会自动导出 5 个无损 ONNX 模型、打包 21 间自习室 `room_catalog.json`、生成黄金测试向量、跑通 `flutter test`（23 项全绿），并输出 `dist/辽宁大学图书馆座位预约.apk`（Releases 中命名为 `LNU-LibSeat-Android-arm64.apk`）。若只想准备资源不编 APK，运行 `python build_android.py --prepare-only`。
 
 ### 在 Mac 上构建免签名 iOS IPA
 ```bash

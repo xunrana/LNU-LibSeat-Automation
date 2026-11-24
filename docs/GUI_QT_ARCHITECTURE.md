@@ -136,12 +136,13 @@ v6 **已彻底移除「浏览器选择」下拉框**，新增 **「手机推送 
 
 源码：`build.py`（Windows） / `build_mac.py`（macOS）
 
-相比 v5（Windows `613 MB` / macOS `632 MB`），v6 在隔离虚拟环境中采用四项极限瘦身策略，产出体积降至 **Windows `204.6 MB` / macOS `193.6 MB`**：
+相比 v5（Windows `613 MB` / macOS `632 MB`），v6 在隔离虚拟环境中采用极限瘦身与架构保障策略，产出体积降至 **Windows `204.7 MB` / macOS `193.6 MB`**：
 
 1. **仅安装 `PySide6-Essentials`**：显式排除 `QtWebEngine / QtPdf / QtQuick / Qt3D / QtMultimedia / QtCharts` 等 30+ 冗余 Qt 模块（立省 500MB+）；
 2. **彻底零 Selenium / 零 OpenCV**：`BUILD_DEPS` 仅含 `pyinstaller / PySide6-Essentials / numpy / onnxruntime / Pillow / requests / pycryptodome`；
 3. **精简 `ddddocr_lite/`**：仅从 `ddddocr` 提取 `common_old.onnx (13 MB)` + `charset_old.json`，丢弃未用到的 `common.onnx (52 MB)` 与 `common_det.onnx (19 MB)`；
-4. **严格过滤模型权重**：仅打包 `core/checkpoints/*.onnx`，排除所有 `.pt / .pth` 训练权重及未在运行期使用的 `logo.png`。
+4. **严格过滤模型权重**：仅打包 `core/checkpoints/*.onnx`，排除所有 `.pt / .pth` 训练权重及未在运行期使用的 `logo.png`；
+5. **macOS 纯原生 `arm64` 校验（`build_mac.py`）**：强制 `--target-arch arm64`、`Info.plist` 声明 `LSArchitecturePriority: ["arm64"]` 与版本号，打包后扫描包内全部 Mach-O 二进制确保零 `x86_64` 残留（彻底告别 Rosetta 2 提醒）。
 
 ---
 

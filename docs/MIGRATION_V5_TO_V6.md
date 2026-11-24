@@ -13,7 +13,7 @@
 | 启动 Edge/Chrome + 登录要 15–35 秒，还常遇驱动不匹配 | **彻底移除 Selenium / 浏览器**，登录 < 1 秒，零驱动维护 |
 | 双账号开 2 个浏览器吃 ~1.5GB 内存；macOS Safari 仅单账号 | 每账号仅一个 HTTP Session（几十 KB），Win / macOS 体验完全一致 |
 | 盲扫全自习室座位表，碰已占座浪费大量时间 | **180ms 实时拉取全房空座**，精准只抢空座，支持多自习室兜底 |
-| 前端强制 1.5s + 2.0s 假延时，加上 `sleep(2)` 慢 5.5 秒 | 直连 API 零假延时，**实测开抢到下单核心仅 0.55 秒** |
+| 前端加上浏览器操作链路冗长，高峰系统繁忙容易失步 | 非高峰直连实测约 **0.55 秒**下单；06:30 高峰自动对齐官网防风控窗口与 6s 冷却，系统繁忙自动退避不误停 |
 | 本机时钟若偏快 1.5 秒容易提前撞到未放座提示 | **HTTP `Date` 自动校准服务端时钟** + `06:30:00~06:30:05` 瞬态宽限 |
 | 仅支持邮件通知 | 新增 **手机端即时 Webhook 推送**（Bark / PushPlus / Server酱 / 企微 / 飞书） |
 
@@ -24,7 +24,7 @@
 > 如果你有 Android 手机且不想再每天开电脑，v6 现在也提供了 **[Android 手机独立版](ANDROID_INSTALL_GUIDE.md)**（直接装 APK，不用续签）；iPhone 用户见 [iOS 安装教程](IOS_INSTALL_GUIDE.md)。
 
 1. **备份旧 `config.py`**（里面存着你的学号、密码和首选座）。
-2. 去 [Releases](https://github.com/XUNRANA/LNU-LibSeat-Automation/releases/latest) 下载 `LNU-LibSeat-v6.0.0-Windows-x86_64.zip`（204.6 MB，比 v5 小了 400 MB+；Mac 下 `LNU-LibSeat-v6.0.0-macOS-arm64.zip`，193.6 MB），解压到新目录。
+2. 去 [Releases](https://github.com/XUNRANA/LNU-LibSeat-Automation/releases/latest) 下载 `LNU-LibSeat-v6.0.0-Windows-x86_64.zip`（204.7 MB，比 v5 小了 400 MB+；Mac 下 `LNU-LibSeat-v6.0.0-macOS-arm64.zip`，193.6 MB，纯原生 Apple Silicon `arm64` 零 Rosetta 2），解压到新目录。
 3. 把旧 `config.py` 复制到新目录（和 `LNU-LibSeat.exe` / `.app` 同级）直接运行即可：
    - 旧配置里的 `BROWSER`、`DRIVER_PATH`、`WEBDRIVER_CACHE` 会被自动忽略，不用手动删；
    - 下次点「开始抢座」时，GUI 会自动保存成干净的 v6 格式 `config.py`。

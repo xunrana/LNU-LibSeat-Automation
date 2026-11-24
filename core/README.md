@@ -4,7 +4,7 @@
 
 | 文件 | 职责 |
 |---|---|
-| `protocol.py` | 全量 API 端点常量、`baseUrl.js` `Global` 动态引导、`ProtocolDriftError` / `TokenExpiredError` |
+| `protocol.py` | 全量 API 端点常量、`baseUrl.js` `Global` 动态引导、`ProtocolDriftError` / `TransientServerBusyError` / `TokenExpiredError`、`parse_retry_after_seconds` |
 | `api_crypto.py` | AES-128-CBC + PKCS7 登录凭据加密、HMAC-SHA256 全局请求签名、验证码坐标 Base64 编码 |
 | `libseat_client.py` | 强类型 `LibSeatClient` Protocol 与 `HttpLibSeatClient`（`requests.Session` 连接池实现） |
 | `clock_sync.py` | 基于 HTTP `Date` 响应头 + `RTT/2` 补偿的服务端北京时间校准 |

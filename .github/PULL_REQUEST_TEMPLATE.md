@@ -14,9 +14,9 @@
 
 ## 自测清单
 
-- [ ] `pytest tests/ -q` 全绿（92 项 Python 离线单测）
+- [ ] `pytest tests/ -q` 全绿（94 项 Python 离线单测）
 - [ ] `ruff check .` 0 告警通过
-- [ ] 若改动 `mobile/` 或跨语言协议/预处理逻辑，`cd mobile && flutter test`（19 项单测）与 `flutter analyze` 通过
+- [ ] 若改动 `mobile/` 或跨语言协议/预处理逻辑，`cd mobile && flutter test`（23 项单测）与 `flutter analyze` 通过
 - [ ] 若改动抢座核心流程（`core/libseat_client.py`、`logic/booker.py`、`logic/orchestrator.py`、`mobile/lib/core/`），已做（或计划做）非整点真机端到端验证
 - [ ] 未提交 `config.py`、真实学号/密码/Token 等敏感数据
 - [ ] 提交为 forward commit（未 rebase / force-push 改写历史）

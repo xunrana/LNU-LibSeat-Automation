@@ -140,7 +140,8 @@ flowchart LR
 - **异步预热**：桌面端 `logic/orchestrator.py:start_captcha_model_preload()` 在 GUI/CLI 启动时以守护线程预热 Click3 + Click1（约 2 秒）；移动端在独立 Isolate 预热，均避免 06:30 首次冷启动。
 - **线程安全**：桌面端由 `CaptchaService._lock` 保护双账号并发调用，仅共享一份 ONNX Runtime 上下文；移动端单 Isolate 串行排队，内存占用可控。
 - **实测性能**：
-  - 本地单次 Click1 推理：**~62 ms**（纯 CPU，全链路从锁定空座到 `freeBook` 下单实测 **0.55 s**）；
+  - 本地单次 Click1 推理：**~62 ms**（纯 CPU，非高峰全链路从锁定空座到 `freeBook` 下单实测 **~0.55 s**）；
+  - 06:30 高峰 Click3 推理同样为毫秒级，但在 `booker` 编排层会主动对齐官网服务端反作弊时间窗（`1.55s` 最小求解间隔 + `2.05s` 校验后缓冲 + `6.20s` 再次取码冷却），保证高过检率并避免触发滑动窗口频控；
   - Click1 测试集端到端一次准确率：**83.48%**（YOLO 覆盖率 100%，单座最多重试 8 次，累计通过率极高）。
 
 ---

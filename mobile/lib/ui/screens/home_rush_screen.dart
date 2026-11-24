@@ -643,7 +643,7 @@ class _HomeRushScreenState extends State<HomeRushScreen> {
     final shortCampus = cfg.campus.replaceAll('校区图书馆', '');
     final seatSummary = cfg.preferSeats.isEmpty
         ? '全室实时空座'
-        : '首选 ${cfg.preferSeats.take(4).join("、")}${cfg.preferSeats.length > 4 ? " 等" : ""}号';
+        : '首选 ${cfg.preferSeats.take(4).join(" → ")}${cfg.preferSeats.length > 4 ? " 等${cfg.preferSeats.length}座" : ""}';
     final accSummary = cfg.useAccount2
         ? '双号接力 (${cfg.start1}–${cfg.end1} / ${cfg.start2}–${cfg.end2})'
         : '${cfg.start1}–${cfg.end1}';
@@ -727,7 +727,13 @@ class _HomeRushScreenState extends State<HomeRushScreen> {
     final start2Ctrl = TextEditingController(text: cfg.start2);
     final end2Ctrl = TextEditingController(text: cfg.end2);
     var editingAccount = 1; // 1=主账号, 2=副账号
-    final selectedSeats = Set<String>.from(cfg.preferSeats);
+    // 显式使用有序列表维护首选座顺位（点击先后 = 抢座优先级）
+    final selectedSeats = <String>[];
+    for (final s in cfg.preferSeats) {
+      if (!selectedSeats.contains(s)) {
+        selectedSeats.add(s);
+      }
+    }
 
     const quickSlots = <(String, String, String)>[
       ('早八连堂', '08:00', '14:00'),
@@ -985,7 +991,7 @@ class _HomeRushScreenState extends State<HomeRushScreen> {
                     Row(
                       children: <Widget>[
                         Text(
-                          '${dual ? "共用首选座位" : "首选座位"} (${selectedSeats.isEmpty ? "留空抢全室空座" : "已选 ${selectedSeats.length} 个"})',
+                          '${dual ? "共用首选座位" : "首选座位"} (${selectedSeats.isEmpty ? "留空抢全室空座" : "按点击顺位抢 · 已选 ${selectedSeats.length} 个"})',
                           style: const TextStyle(
                             color: LnuColors.textMuted,
                             fontSize: 12,
@@ -1001,52 +1007,200 @@ class _HomeRushScreenState extends State<HomeRushScreen> {
                               style: TextStyle(
                                 color: LnuColors.amberDeep,
                                 fontSize: 12,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
                           ),
                       ],
                     ),
+                    const SizedBox(height: 6),
+                    if (selectedSeats.isEmpty)
+                      const Text(
+                        '按点击先后顺序依次尝试（1 → 2 → 3…），留空则抢全室实时空座',
+                        style: TextStyle(
+                          color: LnuColors.textDim,
+                          fontSize: 11,
+                        ),
+                      )
+                    else
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: <Widget>[
+                            for (var i = 0; i < selectedSeats.length; i++) ...<Widget>[
+                              if (i > 0)
+                                const Padding(
+                                  padding: EdgeInsets.symmetric(horizontal: 4),
+                                  child: Text(
+                                    '→',
+                                    style: TextStyle(
+                                      color: LnuColors.textDim,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              GestureDetector(
+                                key: ValueKey<String>(
+                                  'prefer_order_chip_${selectedSeats[i]}',
+                                ),
+                                onTap: () {
+                                  setSheetState(() {
+                                    selectedSeats.removeAt(i);
+                                  });
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 7,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: LnuColors.amberGlow,
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(
+                                      color: LnuColors.amberHot,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: <Widget>[
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 4.5,
+                                          vertical: 1,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: LnuColors.ink,
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          '${i + 1}',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 9.5,
+                                            fontWeight: FontWeight.w700,
+                                            fontFeatures: <FontFeature>[
+                                              FontFeature.tabularFigures(),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        '${selectedSeats[i]}号',
+                                        style: const TextStyle(
+                                          color: LnuColors.ink,
+                                          fontSize: 11.5,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 2),
+                                      const Icon(
+                                        Icons.close_rounded,
+                                        size: 12,
+                                        color: LnuColors.amberDeep,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
                     const SizedBox(height: 8),
                     SizedBox(
-                      height: 150,
+                      height: 168,
                       child: GridView.builder(
                         gridDelegate:
                             const SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: 6,
                           mainAxisSpacing: 6,
                           crossAxisSpacing: 6,
-                          childAspectRatio: 1.45,
+                          childAspectRatio: 1.32,
                         ),
                         itemCount: allSeats.length,
                         itemBuilder: (_, idx) {
                           final s = allSeats[idx];
-                          final picked = selectedSeats.contains(s);
+                          final orderIdx = selectedSeats.indexOf(s);
+                          final picked = orderIdx >= 0;
                           return GestureDetector(
+                            key: ValueKey<String>('prefer_seat_cell_$s'),
                             onTap: () {
                               setSheetState(() {
                                 if (picked) {
-                                  selectedSeats.remove(s);
+                                  selectedSeats.removeAt(orderIdx);
                                 } else {
                                   selectedSeats.add(s);
                                 }
                               });
                             },
                             child: Container(
-                              alignment: Alignment.center,
                               decoration: BoxDecoration(
                                 color: picked ? LnuColors.ink : LnuColors.card,
                                 borderRadius: BorderRadius.circular(7),
                                 border: Border.all(
-                                  color: picked ? LnuColors.ink : LnuColors.border,
+                                  color: picked
+                                      ? LnuColors.amberHot
+                                      : LnuColors.border,
+                                  width: picked ? 1.2 : 1.0,
                                 ),
                               ),
-                              child: Text(
-                                s,
-                                style: TextStyle(
-                                  color: picked ? Colors.white : LnuColors.text,
-                                  fontSize: 11.5,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                              child: Stack(
+                                children: <Widget>[
+                                  Center(
+                                    child: Padding(
+                                      padding: picked
+                                          ? const EdgeInsets.only(
+                                              top: 5,
+                                              right: 5,
+                                            )
+                                          : EdgeInsets.zero,
+                                      child: Text(
+                                        s,
+                                        style: TextStyle(
+                                          color: picked
+                                              ? Colors.white
+                                              : LnuColors.text,
+                                          fontSize: 11.5,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  if (picked)
+                                    Positioned(
+                                      top: 2,
+                                      right: 2,
+                                      child: Container(
+                                        key: ValueKey<String>(
+                                          'prefer_seat_rank_$s',
+                                        ),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 4,
+                                          vertical: 0.5,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: LnuColors.amberHot,
+                                          borderRadius:
+                                              BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          '${orderIdx + 1}',
+                                          style: const TextStyle(
+                                            color: LnuColors.ink,
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.w800,
+                                            height: 1.1,
+                                            fontFeatures: <FontFeature>[
+                                              FontFeature.tabularFigures(),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                ],
                               ),
                             ),
                           );
@@ -1065,7 +1219,7 @@ class _HomeRushScreenState extends State<HomeRushScreen> {
                           cfg.start2 = start2Ctrl.text.trim();
                           cfg.end2 = end2Ctrl.text.trim();
                         }
-                        cfg.preferSeats = selectedSeats.toList();
+                        cfg.preferSeats = List<String>.from(selectedSeats);
                         cfg.saveToDisk();
                         Navigator.of(sheetCtx).pop();
                       },

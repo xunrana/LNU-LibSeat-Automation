@@ -183,7 +183,7 @@ class _NightstandScreenState extends State<NightstandScreen> {
                         const SizedBox(height: 18),
                         Text(
                           '${cfg.campus.replaceAll("图书馆", "")} · ${cfg.room}'
-                          ' · ${cfg.preferSeats.isEmpty ? "全室实时空座" : "首选 ${cfg.preferSeats.join(", ")}"}',
+                          ' · ${cfg.preferSeats.isEmpty ? "全室实时空座" : "首选 ${cfg.preferSeats.join(" → ")}"}',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             color: subColor,

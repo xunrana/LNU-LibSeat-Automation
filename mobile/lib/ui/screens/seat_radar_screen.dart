@@ -1024,10 +1024,17 @@ class _SeatRadarScreenState extends State<SeatRadarScreen> {
                                       roomName,
                                       pickedSeat!.seatNo,
                                     );
+                                    final normNo =
+                                        normalizeSeatNo(pickedSeat!.seatNo);
+                                    final rank =
+                                        ctrl.config.preferSeats.indexOf(normNo) +
+                                            1;
                                     ScaffoldMessenger.of(ctx).showSnackBar(
                                       SnackBar(
                                         content: Text(
-                                          '已将 $roomName ${pickedSeat!.seatNo} 号加入明日首选座',
+                                          rank > 0
+                                              ? '已将 $roomName ${pickedSeat!.seatNo} 号设为明日首选第 $rank 顺位'
+                                              : '已将 $roomName ${pickedSeat!.seatNo} 号加入明日首选座',
                                         ),
                                       ),
                                     );

@@ -195,4 +195,78 @@ void main() {
     expect(find.text('签到提醒已关 · 点此开启'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('首选座位按点击先后展示角标顺位与顶部顺位条并支持点击移除重排 (Issue #9)', (
+    WidgetTester tester,
+  ) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final store = MobileConfigStore();
+    final controller = MobileRushController(config: store);
+
+    await tester.pumpWidget(LnuLibSeatMobileApp(controller: controller));
+    await tester.pump();
+
+    final quickEdit = find.text('速改');
+    await tester.ensureVisible(quickEdit);
+    await tester.tap(quickEdit);
+    await tester.pumpAndSettle();
+
+    // 未选时显示点击顺序提示文案
+    expect(
+      find.text('按点击先后顺序依次尝试（1 → 2 → 3…），留空则抢全室实时空座'),
+      findsOneWidget,
+    );
+
+    // 逆序点选 4 -> 2 -> 1，验证角标严格按点击顺位显示 1 / 2 / 3
+    for (final seatNo in const <String>['4', '2', '1']) {
+      final cell = find.byKey(ValueKey<String>('prefer_seat_cell_$seatNo'));
+      await tester.ensureVisible(cell);
+      await tester.tap(cell);
+      await tester.pumpAndSettle();
+    }
+
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey<String>('prefer_seat_rank_4')),
+        matching: find.text('1'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey<String>('prefer_seat_rank_2')),
+        matching: find.text('2'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey<String>('prefer_seat_rank_1')),
+        matching: find.text('3'),
+      ),
+      findsOneWidget,
+    );
+
+    // 从顶部顺位条移除第 2 顺位「2号」，第 3 顺位「1号」自动递补为第 2 顺位
+    await tester.tap(find.byKey(const ValueKey<String>('prefer_order_chip_2')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey<String>('prefer_seat_rank_2')), findsNothing);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey<String>('prefer_seat_rank_1')),
+        matching: find.text('2'),
+      ),
+      findsOneWidget,
+    );
+
+    final saveBtn = find.text('保  存  调  整');
+    await tester.ensureVisible(saveBtn);
+    await tester.tap(saveBtn);
+    await tester.pumpAndSettle();
+
+    expect(store.preferSeats, equals(<String>['4', '1']));
+    expect(find.textContaining('首选 4 → 1'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }

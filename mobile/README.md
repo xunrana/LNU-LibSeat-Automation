@@ -88,12 +88,12 @@
 ## 安装方式（均在 [GitHub Releases](https://github.com/XUNRANA/LNU-LibSeat-Automation/releases/latest) 下载）
 
 ### Android（主推，直接安装永久有效）
-1. 下载 **`LNU-LibSeat-Android-arm64.apk`**（166.0 MB，本地运行 `python build_android.py` 产出的 `dist/辽宁大学图书馆座位预约.apk` 是同一个包）。
+1. 下载 **`LNU-LibSeat-Android-arm64.apk`**（约 166 MB，本地运行 `python build_android.py` 产出的 `dist/辽宁大学图书馆座位预约.apk` 是同一个包）。
 2. 直接点击安装（未上架应用商店，遇“未知来源 / 未备案”提示点继续安装；后续新版直接覆盖安装，不会丢配置）。
 3. 装完后到 **我的 → 晨约守夜与后台保活** 点亮 4 项权限体检，并按手机品牌开启后台白名单。完整分品牌设置见 **[docs/ANDROID_INSTALL_GUIDE.md](../docs/ANDROID_INSTALL_GUIDE.md)**。
 
 ### iPhone / iPad（iOS 15.0+，免费自签）
-因为未花 99 美元购买苹果开发者年费上架 App Store，发布的是免签名包 **`LNU-LibSeat-iOS-arm64-unsigned.ipa`**（146.8 MB）。完整分步教程见 **[docs/IOS_INSTALL_GUIDE.md](../docs/IOS_INSTALL_GUIDE.md)**，常用方式速览：
+因为未花 99 美元购买苹果开发者年费上架 App Store，发布的是免签名包 **`LNU-LibSeat-iOS-arm64-unsigned.ipa`**（约 147 MB）。完整分步教程见 **[docs/IOS_INSTALL_GUIDE.md](../docs/IOS_INSTALL_GUIDE.md)**，常用方式速览：
 
 | 工具 | 适用情况 | 有效期 | 说明 |
 | :--- | :--- | :--- | :--- |

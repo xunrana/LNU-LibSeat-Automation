@@ -11,7 +11,7 @@
 
 ## 安装前先知道 3 件事
 
-1. **下载文件**：去 [GitHub Releases](https://github.com/XUNRANA/LNU-LibSeat-Automation/releases/latest) 下载 **`LNU-LibSeat-iOS-arm64-unsigned.ipa`**（约 146.8 MB，内置全部 5 个本地 ONNX 验证码模型）。
+1. **下载文件**：去 [GitHub Releases](https://github.com/xunrana/LNU-LibSeat-Automation/releases/latest) 下载 **`LNU-LibSeat-iOS-arm64-unsigned.ipa`**（约 147 MB，内置全部 5 个本地 ONNX 验证码模型）。
 2. **为什么需要自签**：苹果限制非 App Store 应用必须带签名证书才能装进手机，普通免费 Apple ID 可以免费签发个人开发证书。
 3. **免费自签的正常限制**：
    - 证书每 **7 天过期一次**，到期前用原工具原位覆盖重签一下就行（**不要先卸载**，账号、配置和方案都不会丢；用 SideStore 可以连 Wi-Fi 无线续签）；

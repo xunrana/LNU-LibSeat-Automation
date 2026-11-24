@@ -8,6 +8,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+APP_VERSION = "v6.0.1"
 DEFAULT_BASE_URL = "http://libseat.lnu.edu.cn"
 DEFAULT_REFERER = "http://libseat.lnu.edu.cn/libseat/"
 DEFAULT_USER_AGENT = (

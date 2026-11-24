@@ -103,7 +103,11 @@ class MainWindow(QMainWindow):
         outer.addWidget(body, stretch=1)
 
         # 底部 footer
-        footer = QLabel("·   EST. 1948   ·   辽 宁 大 学 图 书 馆   ·   LIBSEAT   ·")
+        from core.protocol import APP_VERSION
+
+        footer = QLabel(
+            f"·   EST. 1948   ·   辽 宁 大 学 图 书 馆   ·   LIBSEAT {APP_VERSION}   ·"
+        )
         footer.setAlignment(Qt.AlignmentFlag.AlignCenter)
         footer.setFont(serif(8, ls=4))
         footer.setStyleSheet(

@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../core/protocol.dart';
 import '../../logic/seat_strategy.dart';
 import '../../services/background_scheduler.dart';
 import '../../services/config_store.dart';
@@ -224,6 +225,15 @@ class SettingsScreen extends StatelessWidget {
                             color: LnuColors.textDim,
                             fontSize: 10.5,
                             letterSpacing: 1.8,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'LNU-LibSeat ${ProtocolConstants.appVersion}',
+                          style: TextStyle(
+                            color: LnuColors.textDim,
+                            fontSize: 10,
+                            letterSpacing: 1.0,
                           ),
                         ),
                       ],

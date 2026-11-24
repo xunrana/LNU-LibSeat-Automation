@@ -260,7 +260,10 @@ class MobileOrchestrator {
           );
 
     try {
-      sessionLog(account, '⚡ 纯 API 会话启动（手机端本地引擎）。');
+      sessionLog(
+        account,
+        '⚡ 纯 API 会话启动（LNU-LibSeat ${ProtocolConstants.appVersion} · 手机端本地引擎）。',
+      );
 
       var effectiveMaint = maintenanceMode;
       if (effectiveMaint == null) {

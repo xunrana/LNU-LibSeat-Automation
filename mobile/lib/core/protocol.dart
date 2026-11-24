@@ -6,6 +6,7 @@ library;
 class ProtocolConstants {
   ProtocolConstants._();
 
+  static const String appVersion = 'v6.0.1';
   static const String defaultBaseUrl = 'http://libseat.lnu.edu.cn';
   static const String defaultReferer = 'http://libseat.lnu.edu.cn/libseat/';
   static const String defaultUserAgent =

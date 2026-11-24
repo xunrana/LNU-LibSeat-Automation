@@ -7,7 +7,24 @@
 
 ## [Unreleased]
 
-## [6.0.0] - 2026-11-24
+## [6.0.1] - 2026-11-24
+
+> **强烈推荐所有 v6.0.0 用户覆盖升级**（账号、密码、方案与笔记全部保留）。本版本根治了 `06:30` 三字验证码高峰期的「校验通过后下单报验证码错误」与「系统繁忙 6 秒滑动锁 12 次熔断」问题，补齐手机端偏好选座顺位提示与全量日志导出，并将四端统一对齐到 `v6.0.1`。
+
+### Added
+- **偏好选座顺位可视化（[Issue #9](https://github.com/xunrana/LNU-LibSeat-Automation/issues/9)）**：手机端「速改 → 首选座位」已选座号右上角显示琥珀色顺位角标（`1 / 2 / 3…`），网格上方新增可横向滚动顺位队列条（轻点移除自动递补）；首页目标摘要、夜守模式与「寻座」存入首选同步展示顺位。
+- **移动端全量脱敏日志导出（`mobile/lib/services/log_exporter.dart`）**：支持一键导出最近一轮完整日志（含双账号）或打包全部历史日志（`.zip`），运行日志自动落盘 `run_log.txt`；iOS 开启「文件」App 直读与隔空投送。
+- **四端统一版本与日志版本首行标识**：`core/protocol.py` / `mobile/lib/core/protocol.dart` 统一定义 `v6.0.1`（Android `versionCode` 递增至 `611` 保证覆盖安装不降级），桌面与手机端 `session.log` 首行及设置页底部均显示当前版本号，便于排查旧包问题。
+
+### Fixed
+- **彻底解决 `06:30` 高峰下单被拒与繁忙熔断（全四端生效）**：
+  - 主动对齐官网 Vue 前端 `chunk0.js` 的 `1.5s + 2.0s` 反作弊延时（`1.55s` 求解间隔 + `2.05s` 校验后缓冲，自适应最高 `2.80s`），解决 `checkCaptcha=OK` 后 `freeBook` 仍报「验证码错误」的问题；
+  - 将 `06:30` 高峰 `/cap/captcha` 返回「系统繁忙, 请稍后: 05/06」与网关 5xx 归类为 `TransientServerBusyError`（不再误判为协议漂移停机），新增 `parse_retry_after_seconds` 提取倒计时并按 `冷却 + 0.60s` 足额等待，跨次/跨座取码自动保持 `6.20s` 冷却，彻底告别 12 次连续繁忙熔断；
+  - 未填首选座时直接复用 `06:29:45` 预热座位表，避免 `06:30:00` 重复刷图。
+- **macOS 纯原生 `arm64` 校验（[Issue #8](https://github.com/xunrana/LNU-LibSeat-Automation/issues/8)）**：`build_mac.py` 强制 `--target-arch arm64`、`Info.plist` 声明原生架构并在打包后自动校验全部 180 个 Mach-O 二进制零 `x86_64` / 零 Rosetta 2 依赖。
+- **构建产物与文档对齐**：`build.py` 直接产出 `dist/LNU-LibSeat-v6.0.1-Windows-x86_64.zip` 与 Release 命名一致；修正文档内菜单名称与接口方法细节，Release 页面新增 4 端直链下载表。
+
+## [6.0.0] - 2026-11-20
 
 > **核心升级**：彻底移除 Selenium、WebDriver 与 OpenCV 依赖，全面切换为**纯 HTTP API 引擎**（非高峰实测约 **0.55 秒**下单，06:30 高峰自动对齐官网反作弊时间窗与 6 秒冷却），并正式推出 **Android（主力推荐） & iOS 手机独立离线版**，桌面端发行包瘦身 **400MB+**（macOS 为纯原生 `arm64`）。详见 [`docs/RELEASE_NOTES_V6.md`](docs/RELEASE_NOTES_V6.md) 与 [`docs/MIGRATION_V5_TO_V6.md`](docs/MIGRATION_V5_TO_V6.md)。
 
@@ -67,8 +84,9 @@
 ## [2.3.0] – [2.8.0]
 - 早期迭代：点选文字验证码识别、多账号并发、定时模式等逐步成型（见 git 标签）。
 
-[Unreleased]: https://github.com/XUNRANA/LNU-LibSeat-Automation/compare/v6.0.0...HEAD
-[6.0.0]: https://github.com/XUNRANA/LNU-LibSeat-Automation/compare/v5.0.0...v6.0.0
+[Unreleased]: https://github.com/xunrana/LNU-LibSeat-Automation/compare/v6.0.1...HEAD
+[6.0.1]: https://github.com/xunrana/LNU-LibSeat-Automation/compare/v6.0.0...v6.0.1
+[6.0.0]: https://github.com/xunrana/LNU-LibSeat-Automation/compare/v5.0.0...v6.0.0
 [5.0.0]: https://github.com/XUNRANA/LNU-LibSeat-Automation/releases/tag/v5.0.0
 [3.0.1]: https://github.com/XUNRANA/LNU-LibSeat-Automation/releases/tag/v3.0.1
 [3.0.0]: https://github.com/XUNRANA/LNU-LibSeat-Automation/releases/tag/v3.0.0

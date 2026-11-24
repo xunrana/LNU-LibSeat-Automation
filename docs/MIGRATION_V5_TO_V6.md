@@ -24,7 +24,7 @@
 > 如果你有 Android 手机且不想再每天开电脑，v6 现在也提供了 **[Android 手机独立版](ANDROID_INSTALL_GUIDE.md)**（直接装 APK，不用续签）；iPhone 用户见 [iOS 安装教程](IOS_INSTALL_GUIDE.md)。
 
 1. **备份旧 `config.py`**（里面存着你的学号、密码和首选座）。
-2. 去 [Releases](https://github.com/XUNRANA/LNU-LibSeat-Automation/releases/latest) 下载 `LNU-LibSeat-v6.0.0-Windows-x86_64.zip`（204.7 MB，比 v5 小了 400 MB+；Mac 下 `LNU-LibSeat-v6.0.0-macOS-arm64.zip`，193.6 MB，纯原生 Apple Silicon `arm64` 零 Rosetta 2），解压到新目录。
+2. 去 [Releases](https://github.com/xunrana/LNU-LibSeat-Automation/releases/latest) 下载 `LNU-LibSeat-v6.0.1-Windows-x86_64.zip`（约 205 MB，比 v5 小了 400 MB+；Mac 下 `LNU-LibSeat-v6.0.1-macOS-arm64.zip`，约 194 MB，纯原生 Apple Silicon `arm64` 零 Rosetta 2），解压到新目录。
 3. 把旧 `config.py` 复制到新目录（和 `LNU-LibSeat.exe` / `.app` 同级）直接运行即可：
    - 旧配置里的 `BROWSER`、`DRIVER_PATH`、`WEBDRIVER_CACHE` 会被自动忽略，不用手动删；
    - 下次点「开始抢座」时，GUI 会自动保存成干净的 v6 格式 `config.py`。

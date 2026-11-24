@@ -25,12 +25,12 @@ v6 彻底去掉了浏览器和 Selenium 驱动，改为直接调用图书馆接�
 
 所有安装包都在 **[GitHub Releases](https://github.com/XUNRANA/LNU-LibSeat-Automation/releases/latest)** 免费下载：
 
-| 平台 | 推荐程度 | 下载文件 | 大小 | 说明 | 教程 |
+| 平台 | 推荐程度 | 下载文件（点击直链） | 大小 | 说明 | 教程 |
 | :--- | :---: | :--- | :---: | :--- | :--- |
-| **Android** | **主推** | `LNU-LibSeat-Android-arm64.apk` | 166.0 MB | 直接安装，不用签名续签，脱离电脑独立运行 | [安装与防杀后台教程](docs/ANDROID_INSTALL_GUIDE.md) |
-| **Windows** | **主推** | `LNU-LibSeat-v6.0.0-Windows-x86_64.zip` | 204.7 MB | 解压双击 `LNU-LibSeat.exe` 就跑，自动防休眠 | [快速上手指南](docs/QUICKSTART.md) |
-| **iPhone / iPad** | 支持 | `LNU-LibSeat-iOS-arm64-unsigned.ipa` | 146.8 MB | 免费 Apple ID 自签安装（7 天续签 / 巨魔永久） | [iOS 免费安装教程](docs/IOS_INSTALL_GUIDE.md) |
-| **macOS** | 支持 | `LNU-LibSeat-v6.0.0-macOS-arm64.zip` | 193.6 MB | 纯原生 Apple Silicon `arm64`（零 Rosetta 2），首次右键 `.command` 启动 | [下方 Mac 说明](#mac-版本apple-silicon) |
+| **Android** | **主推** | [`LNU-LibSeat-Android-arm64.apk`](https://github.com/xunrana/LNU-LibSeat-Automation/releases/download/v6.0.1/LNU-LibSeat-Android-arm64.apk) | 约 166 MB | 直接安装，不用签名续签，脱离电脑独立运行 | [安装与防杀后台教程](docs/ANDROID_INSTALL_GUIDE.md) |
+| **Windows** | **主推** | [`LNU-LibSeat-v6.0.1-Windows-x86_64.zip`](https://github.com/xunrana/LNU-LibSeat-Automation/releases/download/v6.0.1/LNU-LibSeat-v6.0.1-Windows-x86_64.zip) | 约 205 MB | 解压双击 `LNU-LibSeat.exe` 就跑，自动防休眠 | [快速上手指南](docs/QUICKSTART.md) |
+| **iPhone / iPad** | 支持 | [`LNU-LibSeat-iOS-arm64-unsigned.ipa`](https://github.com/xunrana/LNU-LibSeat-Automation/releases/download/v6.0.1/LNU-LibSeat-iOS-arm64-unsigned.ipa) | 约 147 MB | 免费 Apple ID 自签安装（7 天续签 / 巨魔永久） | [iOS 免费安装教程](docs/IOS_INSTALL_GUIDE.md) |
+| **macOS** | 支持 | [`LNU-LibSeat-v6.0.1-macOS-arm64.zip`](https://github.com/xunrana/LNU-LibSeat-Automation/releases/download/v6.0.1/LNU-LibSeat-v6.0.1-macOS-arm64.zip) | 约 194 MB | 纯原生 Apple Silicon `arm64`（零 Rosetta 2），首次右键 `.command` 启动 | [下方 Mac 说明](#mac-版本apple-silicon) |
 
 选型建议很直接：
 - 日常图省心、不想每天开着电脑：**直接用 Android 版**，装完就能查全馆实时空座、睡前挂 6:30、到点前还能弹签到提醒。
@@ -92,11 +92,11 @@ v6 彻底去掉了浏览器和 Selenium 驱动，改为直接调用图书馆接�
 
 ## 电脑端（主推 Windows，也支持 Mac）
 
-电脑端适合放宿舍桌上挂机，不用操心手机省电策略。界面用 PySide6 写的，精简打包后比 v5 小了 400 MB 以上（Windows 包从 613 MB 降到 204.7 MB）。
+电脑端适合放宿舍桌上挂机，不用操心手机省电策略。界面用 PySide6 写的，精简打包后比 v5 小了 400 MB 以上（Windows 包从 613 MB 降到约 205 MB）。
 
 ### Windows 三步上手
 
-1. 去 [Releases](https://github.com/XUNRANA/LNU-LibSeat-Automation/releases/latest) 下载 `LNU-LibSeat-v6.0.0-Windows-x86_64.zip` 并解压。
+1. 去 [Releases](https://github.com/xunrana/LNU-LibSeat-Automation/releases/latest) 下载 `LNU-LibSeat-v6.0.1-Windows-x86_64.zip` 并解压。
 2. 双击目录里的 `LNU-LibSeat.exe` 启动（不需要 Python，也不需要 Edge/Chrome 驱动）。
 3. 选好校区、自习室，填学号密码、时段和收件邮箱（想收微信/Bark 通知可以顺手填“手机推送”框），点 **开始抢座** 即可。首选座位可以全部留空，程序会自动抢当前空座。
 
@@ -117,14 +117,64 @@ v6 彻底去掉了浏览器和 Selenium 驱动，改为直接调用图书馆接�
 
 ### Mac 版本（Apple Silicon）
 
-1. 去 [Releases](https://github.com/XUNRANA/LNU-LibSeat-Automation/releases/latest) 下载 `LNU-LibSeat-v6.0.0-macOS-arm64.zip` 并解压。
+1. 去 [Releases](https://github.com/xunrana/LNU-LibSeat-Automation/releases/latest) 下载 `LNU-LibSeat-v6.0.1-macOS-arm64.zip` 并解压。
 2. 首次运行需要**右键**点击 `首次运行请先双击我.command` → 打开 → 再点一次打开（软件没做苹果付费公证，首次需手动放行；如果被拦，去 **系统设置 → 隐私与安全性 → 仍要打开**）。之后直接双击 `LNU-LibSeat.app` 就行。
 3. v6 去掉浏览器后，Mac 端和 Windows 体验完全一致，支持双账号并行，挂机期间自动用系统 `caffeinate` 防休眠。`config.py` 和 `logs/` 就在 `.app` 同级目录。
 4. **纯原生 Apple Silicon（`arm64`）**：包内全部二进制均为原生 `arm64`，**不依赖 Rosetta 2**（不受后续 macOS 取消 Rosetta 影响）。如果此前安装的是旧版 `v5.0.0-macOS-x86_64` 并频繁收到系统 Rosetta 提示，直接升级到 v6 即可（旧 `config.py` 复制到新目录可无缝沿用）。
 
 ---
 
-## v6 相比 v5 改了什么
+## 常见问题
+
+<details>
+<summary><b>1. 为什么 Android 安装包约 166 MB、Windows 约 205 MB？</b></summary>
+
+安装包里直接内置了 5 个原版无损的 ONNX 神经网络模型（登录 4 位图形码 + Click1/Click3 的 YOLOv8 检测和 MobileNetV4 匹配，光模型就占约 159 MB）。这样设计的好处是完全本地离线识别、识别率稳、不用花一分钱买打码平台 API，也不用担心作者服务器挂掉。
+</details>
+
+<details>
+<summary><b>2. 为什么 06:30 日志里会提示等待 2.05s 或 6s 冷却窗口？是不是卡住了？</b></summary>
+
+这是**正常保护机制，不是卡死**。图书馆服务端在 `06:30` 三字验证码高峰期间会校验官网前端固有的 `1.5s + 2.0s` 延时，并对重新拉取验证码设置了 `6s` 滑动冷却锁（过快重拉会反复返回「系统繁忙, 请稍后: 06」）。v6.0.1 主动对齐了这套节奏：首轮命中约 **4 秒**即可抢中（仍比模拟浏览器快），即便偶发重刷也会稳稳等完冷却再取新图，不会触发 12 次繁忙熔断。
+</details>
+
+<details>
+<summary><b>3. 为什么白天立即抢座时，首选座该时段明明不空闲，日志里还显示“验证码一次通过”？</b></summary>
+
+因为图书馆的验证码接口只校验账号，不绑定具体座位与时段；v6 纯 API 为了在 `06:30` 极致提速，省去了点击座位前的时段查询接口，直接通过下单接口让服务端判定该时段能否预约。白天非高峰单字码极快，遇到已被占的首选座约 **0.5 秒**就会自动跳到下一个座位，属于正常行为。
+</details>
+
+<details>
+<summary><b>4. Android 锁屏后倒计时卡住、解锁才开始跑怎么办？</b></summary>
+
+这是国产系统（尤其是 vivo OriginOS / 小米 HyperOS / 华为鸿蒙）的锁屏冻结机制导致的。请确认已装最新版 APK（可在 **我的** 页面最底部核对版本号），并按 [Android 保活教程](docs/ANDROID_INSTALL_GUIDE.md) 开启「电池优化白名单 / 允许后台高耗电 / 自启动 / 后台弹出界面 / 多任务加锁」，然后把时间设成“当前时间 + 2 分钟”锁屏测一次确认能准时拉起。
+</details>
+
+<details>
+<summary><b>5. 我以前用 v5，原来的 config.py 还能直接用吗？</b></summary>
+
+可以。直接把旧 `config.py` 复制到 v6 同级目录即可，废弃的 `BROWSER`、`DRIVER_PATH`、`WEBDRIVER_CACHE` 字段会被自动忽略。详见 [docs/MIGRATION_V5_TO_V6.md](docs/MIGRATION_V5_TO_V6.md)。
+</details>
+
+<details>
+<summary><b>6. 抢座失败了怎么看原因？</b></summary>
+
+- **手机端**：进入 **我的 → 运行记录与识图回放**，可以直接看每次验证码识别的红绿点，支持一键导出**最近一轮完整日志（含双账号）**或**打包全部历史日志（`.zip`）**；iPhone 也可以直接打开系统「文件」App →「我的 iPhone」→「LNU-LibSeat」随时查看。
+- **电脑端**：打开 `logs/sessions/<时间>_<学号>/`，里面有 `session.log`（首行含当前版本号）、`抢座顺序.txt`、自动抹除了密码和 Token 的 `http_trace.jsonl`，以及验证码红绿点叠加图（`*_captcha_*.png`）。
+</details>
+
+<details>
+<summary><b>7. 怎么把抢座结果推送到微信或 iPhone 通知？</b></summary>
+
+在电脑版“手机推送”框（或 `config.py` 里的 `WEBHOOK_URL`，手机版在 **我的 → 邮件与推送通知**）粘贴对应地址就行，程序会自动按域名适配：
+- Bark（iOS）：`https://api.day.app/<DeviceKey>/`
+- PushPlus（微信）：`https://www.pushplus.plus/send?token=<Token>`
+- Server酱（微信）：`https://sctapi.ftqq.com/<SendKey>.send`
+- 企业微信 / 飞书 / 钉钉群机器人：直接填机器人 Webhook 地址
+</details>
+
+<details>
+<summary><b>8. v6 相比旧版 v5（Selenium 浏览器）改了什么？</b></summary>
 
 | 对比项 | v5（Selenium 浏览器） | v6（纯 HTTP API） |
 | :--- | :--- | :--- |
@@ -135,43 +185,6 @@ v6 彻底去掉了浏览器和 Selenium 驱动，改为直接调用图书馆接�
 | 验证码识别 | 仅 06:30–06:35 启用本地模型 | 按接口返回字数全天自动识别 Click1 / Click3 |
 | 终端与体积 | 仅电脑端（Win 613MB / Mac 632MB） | 新增 Android / iOS 独立版；桌面端缩至 ~200MB（Mac 纯原生 `arm64`） |
 
----
-
-## 常见问题
-
-<details>
-<summary><b>1. 为什么 Android 安装包有 166 MB、Windows 有 205 MB？</b></summary>
-
-安装包里直接内置了 5 个原版无损的 ONNX 神经网络模型（登录 4 位图形码 + Click1/Click3 的 YOLOv8 检测和 MobileNetV4 匹配，光模型就占约 159 MB）。这样设计的好处是完全本地离线识别、识别率稳、不用花一分钱买打码平台 API，也不用担心作者服务器挂掉。
-</details>
-
-<details>
-<summary><b>2. Android 锁屏后倒计时卡住、解锁才开始跑怎么办？</b></summary>
-
-这是国产系统（尤其是 vivo OriginOS / 小米 HyperOS / 华为鸿蒙）的锁屏冻结机制导致的。请确认已装最新版 APK，并按 [Android 保活教程](docs/ANDROID_INSTALL_GUIDE.md) 开启「电池优化白名单 / 允许后台高耗电 / 自启动 / 后台弹出界面 / 多任务加锁」，然后把时间设成“当前时间 + 2 分钟”锁屏测一次确认能准时拉起。
-</details>
-
-<details>
-<summary><b>3. 我以前用 v5，原来的 config.py 还能直接用吗？</b></summary>
-
-可以。直接把旧 `config.py` 复制到 v6 同级目录即可，废弃的 `BROWSER`、`DRIVER_PATH`、`WEBDRIVER_CACHE` 字段会被自动忽略。详见 [docs/MIGRATION_V5_TO_V6.md](docs/MIGRATION_V5_TO_V6.md)。
-</details>
-
-<details>
-<summary><b>4. 抢座失败了怎么看原因？</b></summary>
-
-- **手机端**：进入 **我的 → 运行记录与识图回放**，可以直接看每次验证码识别的红绿点，支持一键导出**最近一轮完整日志（含双账号）**或**打包全部历史日志（`.zip`）**；iPhone 也可以直接打开系统「文件」App →「我的 iPhone」→「LNU-LibSeat」随时查看。
-- **电脑端**：打开 `logs/sessions/<时间>_<学号>/`，里面有 `session.log`、`抢座顺序.txt`、自动抹除了密码和 Token 的 `http_trace.jsonl`，以及验证码红绿点叠加图（`*_captcha_*.png`）。
-</details>
-
-<details>
-<summary><b>5. 怎么把抢座结果推送到微信或 iPhone 通知？</b></summary>
-
-在电脑版“手机推送”框（或 `config.py` 里的 `WEBHOOK_URL`，手机版在“我的 → 战报与推送”）粘贴对应地址就行，程序会自动按域名适配：
-- Bark（iOS）：`https://api.day.app/<DeviceKey>/`
-- PushPlus（微信）：`https://www.pushplus.plus/send?token=<Token>`
-- Server酱（微信）：`https://sctapi.ftqq.com/<SendKey>.send`
-- 企业微信 / 飞书 / 钉钉群机器人：直接填机器人 Webhook 地址
 </details>
 
 ---
@@ -224,9 +237,9 @@ cd mobile && flutter test  # 23 项 Flutter 跨语言契约与界面单测
 
 **本地打包各端安装包：**
 - Android：`python build_android.py` → `dist/辽宁大学图书馆座位预约.apk`
-- Windows：`python build.py` → `dist/LNU-LibSeat-v6.0.0-Windows-x86_64.zip`
+- Windows：`python build.py` → `dist/LNU-LibSeat-v6.0.1-Windows-x86_64.zip`
 - iOS（需 macOS + Xcode + CocoaPods）：`python3 build_ios.py` → `dist/LNU-LibSeat-iOS-arm64-unsigned.ipa`
-- macOS（需 Apple Silicon Mac）：`python3 build_mac.py` → `dist/LNU-LibSeat-v6.0.0-macOS-arm64.zip`
+- macOS（需 Apple Silicon Mac）：`python3 build_mac.py` → `dist/LNU-LibSeat-v6.0.1-macOS-arm64.zip`
 
 </details>
 

@@ -108,7 +108,7 @@
 ### 3.8 辅助信息端点（协议常量已收录，主要用于手机端入馆/寻座频道）
 - **馆方公告**：`GET /rest/v2/announce`（`EP_ANNOUNCE`）
 - **历史预约记录**：`GET /rest/v2/history/{page}/{pageSize}`（`EP_HISTORY`，支撑移动端「辽大自习书简」）
-- **楼层与可用座补充接口**：`GET /rest/v2/room/floors/{buildingId}`（`EP_ROOM_FLOORS`）、`GET /rest/v2/availSeats`（`EP_AVAIL_SEATS`）、`GET /rest/v2/settings`（`EP_SETTINGS`）
+- **楼层与可用座补充接口**：`POST /rest/v2/room/floors/{buildingId}`（`EP_ROOM_FLOORS`）、`GET /rest/v2/availSeats`（`EP_AVAIL_SEATS`）、`GET /rest/v2/settings`（`EP_SETTINGS`）
 
 ---
 

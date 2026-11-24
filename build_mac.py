@@ -18,8 +18,8 @@ LNU-LibSeat-Automation macOS 构建脚本（精简瘦身版）
     python3.12 build_mac.py
 
 产物：
-    dist/LNU-LibSeat-v6.0.0-macOS-arm64/        <- 发行夹
-    dist/LNU-LibSeat-v6.0.0-macOS-arm64.zip      <- 分发给用户的压缩包
+    dist/LNU-LibSeat-v6.0.1-macOS-arm64/        <- 发行夹
+    dist/LNU-LibSeat-v6.0.1-macOS-arm64.zip      <- 分发给用户的压缩包
 """
 import os
 import platform
@@ -31,7 +31,7 @@ import venv
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 APP_NAME = "LNU-LibSeat"
-APP_VERSION = "v6.0.0"  # 每次发布新版本请修改此处
+APP_VERSION = "v6.0.1"  # 每次发布新版本请修改此处
 ARCH = platform.machine() or "arm64"  # arm64 (Apple Silicon)
 DIST_NAME = f"{APP_NAME}-{APP_VERSION}-macOS-{ARCH}"
 DIST_DIR = os.path.join(ROOT, "dist", DIST_NAME)

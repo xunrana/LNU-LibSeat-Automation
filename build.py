@@ -15,7 +15,7 @@ Usage:
     python build.py
 
 Output:
-    dist/LNU-LibSeat-v6.0.0/
+    dist/LNU-LibSeat-v6.0.1-Windows-x86_64/
         LNU-LibSeat.exe   <- Double-click to run (GUI)
         logs/              <- Log output (auto-created)
 """
@@ -28,8 +28,8 @@ import venv
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 APP_NAME = "LNU-LibSeat"
-APP_VERSION = "v6.0.0"  # 每次发布新版本请修改此处
-DIST_NAME = f"{APP_NAME}-{APP_VERSION}"
+APP_VERSION = "v6.0.1"  # 每次发布新版本请修改此处
+DIST_NAME = f"{APP_NAME}-{APP_VERSION}-Windows-x86_64"
 DIST_DIR = os.path.join(ROOT, "dist", DIST_NAME)
 VENV_DIR = os.path.join(ROOT, ".build_venv")
 STAGE_DIR = os.path.join(ROOT, ".build_stage")

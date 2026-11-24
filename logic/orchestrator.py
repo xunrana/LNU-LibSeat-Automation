@@ -16,7 +16,7 @@ from core.clock_sync import ClockSync
 from core.libseat_client import HttpLibSeatClient, LibSeatClient
 from core.logger import get_logger, register_account_log_file
 from core.notifications import notify_booking_success
-from core.protocol import DEFAULT_BASE_URL, TokenExpiredError
+from core.protocol import APP_VERSION, DEFAULT_BASE_URL, TokenExpiredError
 from core.rate_limiter import RateLimiter
 from core.session_recorder import SessionRecorder
 from logic.booker import ApiSeatBooker
@@ -241,7 +241,7 @@ def run_api_session(
     waiter = wait_until_fn or wait_until
 
     try:
-        logger.info("⚡ [%s] 纯 API 会话启动（无浏览器模式）。", account)
+        logger.info("⚡ [%s] 纯 API 会话启动（LNU-LibSeat %s · 无浏览器模式）。", account, APP_VERSION)
 
         effective_maint = maintenance_mode
         if effective_maint is None:

@@ -246,19 +246,19 @@ sequenceDiagram
 
 ```bash
 # 🤖 Android（主推 · Windows / macOS 均可构建）
-python build_android.py     # → dist/辽宁大学图书馆座位预约.apk (166.0 MB)
+python build_android.py     # → dist/辽宁大学图书馆座位预约.apk (约 166 MB)
 
 # 🪟 Windows（主推 · 需在 Windows 上运行）
-python build.py             # → dist/LNU-LibSeat-v6.0.0-Windows-x86_64.zip (204.7 MB)
+python build.py             # → dist/LNU-LibSeat-v6.0.1-Windows-x86_64.zip (约 205 MB)
 
 # 🍎 iOS（需在 macOS + Xcode + CocoaPods 上运行）
-python3 build_ios.py        # → dist/LNU-LibSeat-iOS-arm64-unsigned.ipa (146.8 MB)
+python3 build_ios.py        # → dist/LNU-LibSeat-iOS-arm64-unsigned.ipa (约 147 MB)
 
 # 💻 macOS（需在 Apple Silicon Mac 上运行，强制纯原生 arm64 校验）
-python3 build_mac.py        # → dist/LNU-LibSeat-v6.0.0-macOS-arm64.zip (193.6 MB)
+python3 build_mac.py        # → dist/LNU-LibSeat-v6.0.1-macOS-arm64.zip (约 194 MB)
 ```
 
-桌面端 `build.py` / `build_mac.py` 核心瘦身与架构保障措施（Windows `613 MB → 204.7 MB`，macOS `632 MB → 193.6 MB`）：
+桌面端 `build.py` / `build_mac.py` 核心瘦身与架构保障措施（Windows `613 MB → 约 205 MB`，macOS `632 MB → 约 194 MB`）：
 1. 仅安装 `PySide6-Essentials`（剔除 `QtWebEngine / QtPdf / QtQuick / Qt3D` 等 500MB+ 冗余模块）；
 2. 零 OpenCV (`cv2`)、零 `selenium` / `webdriver-manager` / `mss`；
 3. 从 `ddddocr` 仅提取 `common_old.onnx (13 MB) + charset_old.json` 到 `ddddocr_lite/`（剔除未用的 52MB `common.onnx` 与 19MB `common_det.onnx`）；

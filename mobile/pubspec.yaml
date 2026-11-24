@@ -1,7 +1,7 @@
 name: lnu_libseat_mobile
 description: "辽宁大学图书馆 · 智能抢座神器 手机独立版 (Android & iOS) — 纯 HTTP API 毫秒级直连 + 端侧 ONNX 验证码推理"
 publish_to: "none"
-version: 6.1.0+610
+version: 6.0.1+611
 
 environment:
   sdk: ">=3.3.0 <4.0.0"

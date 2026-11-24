@@ -8,7 +8,7 @@
 
 ## 一、下载与安装
 
-1. 用手机浏览器打开 [GitHub Releases](https://github.com/XUNRANA/LNU-LibSeat-Automation/releases/latest)，下载 **`LNU-LibSeat-Android-arm64.apk`**（约 166.0 MB，内置全部 5 个本地 ONNX 识图模型；本地用 `python build_android.py` 打包出来的 `dist/辽宁大学图书馆座位预约.apk` 是同一个包）。
+1. 用手机浏览器打开 [GitHub Releases](https://github.com/xunrana/LNU-LibSeat-Automation/releases/latest)，下载 **`LNU-LibSeat-Android-arm64.apk`**（约 166 MB，内置全部 5 个本地 ONNX 识图模型；本地用 `python build_android.py` 打包出来的 `dist/辽宁大学图书馆座位预约.apk` 是同一个包）。
    - 如果用微信传到手机，文件名末尾可能被自动加上 `.1`，在文件管理器里删掉 `.1` 再点安装就行。
 2. 直接点击安装。因为是免费开源软件、没花钱去各大应用商店备案，系统会弹常规安全提示，放行即可：
    - **华为鸿蒙（HarmonyOS）**：弹窗底部点 **继续安装**；若被纯净模式增强防护拦截，去 **设置 → 系统和更新 → 纯净模式** 临时关闭后再装。

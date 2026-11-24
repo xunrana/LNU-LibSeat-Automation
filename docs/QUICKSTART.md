@@ -12,10 +12,10 @@
 
 | 平台 | 推荐 | 文件名 | 大小 | 适用情况 |
 | :--- | :---: | :--- | :---: | :--- |
-| **Android** | **主推** | `LNU-LibSeat-Android-arm64.apk` | 166.0 MB | 有安卓机、不想开电脑、想随时查空座和收签到提醒 |
-| **Windows** | **主推** | `LNU-LibSeat-v6.0.0-Windows-x86_64.zip` | 204.7 MB | 习惯宿舍电脑挂机，或者期末求稳不想折腾手机保活 |
-| **iPhone / iPad** | 支持 | `LNU-LibSeat-iOS-arm64-unsigned.ipa` | 146.8 MB | 只用苹果手机，可用免费 Apple ID 自签 |
-| **macOS** | 支持 | `LNU-LibSeat-v6.0.0-macOS-arm64.zip` | 193.6 MB | Apple Silicon Mac 电脑挂机（纯原生 `arm64`，零 Rosetta 2） |
+| **Android** | **主推** | `LNU-LibSeat-Android-arm64.apk` | 约 166 MB | 有安卓机、不想开电脑、想随时查空座和收签到提醒 |
+| **Windows** | **主推** | `LNU-LibSeat-v6.0.1-Windows-x86_64.zip` | 约 205 MB | 习惯宿舍电脑挂机，或者期末求稳不想折腾手机保活 |
+| **iPhone / iPad** | 支持 | `LNU-LibSeat-iOS-arm64-unsigned.ipa` | 约 147 MB | 只用苹果手机，可用免费 Apple ID 自签 |
+| **macOS** | 支持 | `LNU-LibSeat-v6.0.1-macOS-arm64.zip` | 约 194 MB | Apple Silicon Mac 电脑挂机（纯原生 `arm64`，零 Rosetta 2） |
 
 ---
 
@@ -34,7 +34,7 @@
 
 ## 二、Windows 电脑版（主推）
 
-1. **下载解压**：去 Releases 下 `LNU-LibSeat-v6.0.0-Windows-x86_64.zip`，解压到任意文件夹。
+1. **下载解压**：去 Releases 下 `LNU-LibSeat-v6.0.1-Windows-x86_64.zip`，解压到任意文件夹。
 2. **直接双击运行**：打开目录双击 `LNU-LibSeat.exe`（v5 老用户把旧 `config.py` 直接复制过来就行）。
 3. **填表点开始**：
    - **目标设置**：选校区和自习室；首选座位最多填 10 个，**全部留空也没问题**，会自动抢实时空座。
@@ -62,7 +62,7 @@
 ## 三、iPhone 与 Mac 用户
 
 - **iPhone / iPad**：去 Releases 下 `LNU-LibSeat-iOS-arm64-unsigned.ipa`，用 Sideloadly、爱思助手、SideStore 或巨魔免费安装。首次打开前需在 iPhone 设置里开启「开发者模式」并信任证书。详细步骤见 [docs/IOS_INSTALL_GUIDE.md](IOS_INSTALL_GUIDE.md)。
-- **macOS (Apple Silicon)**：去 Releases 下 `LNU-LibSeat-v6.0.0-macOS-arm64.zip`（纯原生 `arm64`，不依赖 Rosetta 2），解压后首次**右键**点击 `首次运行请先双击我.command` → 打开 → 再点打开（解除未公证拦截），之后直接双击 `LNU-LibSeat.app` 即可。挂机期间自动通过系统 `caffeinate` 防休眠，双账号直接并行。
+- **macOS (Apple Silicon)**：去 Releases 下 `LNU-LibSeat-v6.0.1-macOS-arm64.zip`（纯原生 `arm64`，不依赖 Rosetta 2），解压后首次**右键**点击 `首次运行请先双击我.command` → 打开 → 再点打开（解除未公证拦截），之后直接双击 `LNU-LibSeat.app` 即可。挂机期间自动通过系统 `caffeinate` 防休眠，双账号直接并行。
 
 ---
 

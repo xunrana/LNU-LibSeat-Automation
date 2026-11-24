@@ -30,7 +30,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 MOBILE_DIR = ROOT / "mobile"
 DIST_DIR = ROOT / "dist"
-APP_VERSION = "v6.1.0"
+APP_VERSION = "v6.0.1"
 APK_OUT_NAME = "辽宁大学图书馆座位预约.apk"
 
 CUSTOM_FILES_TO_PRESERVE = (
